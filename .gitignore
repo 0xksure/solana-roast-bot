@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .env
 data/stats.json
+node_modules/
+frontend/dist/
+frontend/node_modules/

@@ -261,8 +261,10 @@ async def robots():
 
 # Mount static files (serves built React app assets + images)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
-app.mount("/img", StaticFiles(directory=str(STATIC_DIR / "img")), name="img")
+if (STATIC_DIR / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
+if (STATIC_DIR / "img").exists():
+    app.mount("/img", StaticFiles(directory=str(STATIC_DIR / "img")), name="img")
 
 
 @app.get("/")
