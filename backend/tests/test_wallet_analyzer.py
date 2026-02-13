@@ -280,7 +280,8 @@ def test_build_net_worth_timeline_basic():
     ts_base = int(datetime(2024, 1, 15, tzinfo=timezone.utc).timestamp())
     sigs = [{"blockTime": ts_base + i * 3600, "signature": f"s{i}"} for i in range(5)]
     result = _build_net_worth_timeline(sigs, [], "WALLET")
-    assert len(result) == 1
+    # Now returns continuous timeline from first month to current month
+    assert len(result) >= 1
     assert result[0]["month"] == "2024-01"
     assert result[0]["tx_count"] == 5
     assert result[0]["sol_price_usd"] == 95.0  # from SOL_PRICE_HISTORY
@@ -297,7 +298,8 @@ def test_build_net_worth_timeline_with_tx_balances():
         "meta": {"postBalances": [5_000_000_000], "innerInstructions": []},
     }]
     result = _build_net_worth_timeline(sigs, txns, wallet)
-    assert len(result) == 1
+    # Continuous timeline from 2024-03 to now
+    assert len(result) >= 1
     assert result[0]["estimated_sol"] == 5.0
     assert result[0]["estimated_usd"] == 5.0 * 185.0  # 2024-03 price
 

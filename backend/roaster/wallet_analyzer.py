@@ -187,6 +187,67 @@ async def _get_recent_transactions(client: httpx.AsyncClient, signatures: list, 
     return txns
 
 
+async def _get_sampled_transactions(client: httpx.AsyncClient, signatures: list, wallet: str, max_calls: int = 30) -> list:
+    """Sample transactions across full wallet history for balance snapshots and protocol detection.
+
+    Strategy: Pick the LAST transaction of each active month (for end-of-month balance).
+    If more months than budget, evenly sample months.
+    Always include the 10 most recent transactions for current data.
+    """
+    if not signatures:
+        return []
+
+    # Always include the 10 most recent signatures
+    recent_budget = min(10, len(signatures))
+    recent_sigs = set(s["signature"] for s in signatures[:recent_budget])
+
+    # Group signatures by month, pick the LAST (oldest) signature per month for end-of-month balance
+    monthly_last: dict[str, dict] = {}
+    for sig in signatures:
+        bt = sig.get("blockTime")
+        if not bt:
+            continue
+        month_key = datetime.fromtimestamp(bt, tz=timezone.utc).strftime("%Y-%m")
+        # Signatures are returned newest-first, so the last one we see per month is the oldest
+        monthly_last[month_key] = sig
+
+    # Budget for historical samples
+    history_budget = max_calls - recent_budget
+    sorted_months = sorted(monthly_last.keys())
+
+    if len(sorted_months) <= history_budget:
+        sampled_months = sorted_months
+    else:
+        # Evenly sample across months
+        step = len(sorted_months) / history_budget
+        sampled_months = []
+        for i in range(history_budget):
+            idx = int(i * step)
+            sampled_months.append(sorted_months[idx])
+        # Always include first and last month
+        if sorted_months[0] not in sampled_months:
+            sampled_months[0] = sorted_months[0]
+        if sorted_months[-1] not in sampled_months:
+            sampled_months[-1] = sorted_months[-1]
+
+    # Collect all signatures to fetch (deduplicated)
+    sigs_to_fetch: dict[str, bool] = {}
+    for s in signatures[:recent_budget]:
+        sigs_to_fetch[s["signature"]] = True
+    for month in sampled_months:
+        sig = monthly_last[month]
+        sigs_to_fetch[sig["signature"]] = True
+
+    # Fetch all selected transactions
+    txns = []
+    for sig_str in sigs_to_fetch:
+        tx = await _get_transaction_parsed(client, sig_str)
+        if tx:
+            txns.append(tx)
+        await asyncio.sleep(0.1)
+    return txns
+
+
 def _analyze_signatures(sigs: list) -> dict:
     if not sigs:
         return {"total": 0, "failed": 0, "first_ts": None, "last_ts": None,
@@ -596,8 +657,12 @@ def _analyze_recent_txns(txns: list) -> dict:
     }
 
 
-def _build_net_worth_timeline(sigs: list, recent_txns: list, wallet: str) -> list:
-    """Build monthly SOL balance approximation from signatures and sampled transactions."""
+def _build_net_worth_timeline(sigs: list, sampled_txns: list, wallet: str) -> list:
+    """Build monthly SOL balance from sampled transactions across full history.
+
+    Uses postBalances from sampled txns for actual balance snapshots,
+    then interpolates for months without a direct snapshot.
+    """
     if not sigs:
         return []
 
@@ -605,16 +670,18 @@ def _build_net_worth_timeline(sigs: list, recent_txns: list, wallet: str) -> lis
     if not timestamps:
         return []
 
-    # Group sigs by month
-    monthly: dict[str, list] = defaultdict(list)
+    # Count txs per month from signatures
+    monthly_counts: dict[str, int] = defaultdict(int)
     for ts in timestamps:
         dt = datetime.fromtimestamp(ts, tz=timezone.utc)
-        key = dt.strftime("%Y-%m")
-        monthly[key].append(ts)
+        monthly_counts[dt.strftime("%Y-%m")] += 1
 
-    # Try to extract SOL balances from parsed transactions
-    tx_balances: dict[int, float] = {}  # blockTime -> SOL balance
-    for tx in recent_txns:
+    # Extract SOL balances from sampled transactions, keyed by month
+    # For each month, use the latest balance snapshot available
+    month_balances: dict[str, float] = {}
+    tx_by_month: dict[str, list[tuple[int, float]]] = defaultdict(list)
+
+    for tx in sampled_txns:
         bt = tx.get("blockTime")
         if not bt:
             continue
@@ -626,40 +693,41 @@ def _build_net_worth_timeline(sigs: list, recent_txns: list, wallet: str) -> lis
             if k == wallet:
                 post_bals = meta.get("postBalances") or []
                 if i < len(post_bals):
-                    tx_balances[bt] = post_bals[i] / 1e9
+                    month_key = datetime.fromtimestamp(bt, tz=timezone.utc).strftime("%Y-%m")
+                    tx_by_month[month_key].append((bt, post_bals[i] / 1e9))
                 break
 
+    # Pick the latest balance per month
+    for month_key, entries in tx_by_month.items():
+        entries.sort(key=lambda x: x[0])
+        month_balances[month_key] = entries[-1][1]  # latest timestamp's balance
+
+    # Build continuous timeline from first month to current month
+    first_dt = datetime.fromtimestamp(timestamps[0], tz=timezone.utc)
+    now = datetime.now(tz=timezone.utc)
+    all_months = []
+    y, m = first_dt.year, first_dt.month
+    while (y, m) <= (now.year, now.month):
+        all_months.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+
+    # Interpolate: forward-fill from nearest known balance
     timeline = []
-    sorted_months = sorted(monthly.keys())
-
-    # For months where we have tx data, use the latest balance snapshot
-    # Otherwise, interpolate
-    last_known_balance = 0.0
-    for month_key in sorted_months:
-        month_timestamps = monthly[month_key]
-        tx_count = len(month_timestamps)
-
-        # Find any balance snapshots in this month
-        month_balance = None
-        for ts in sorted(month_timestamps, reverse=True):
-            if ts in tx_balances:
-                month_balance = tx_balances[ts]
-                break
-
-        if month_balance is not None:
-            last_known_balance = month_balance
-        else:
-            # Estimate: use last known balance
-            month_balance = last_known_balance
+    last_known = 0.0
+    for month_key in all_months:
+        if month_key in month_balances:
+            last_known = month_balances[month_key]
 
         sol_price = SOL_PRICE_HISTORY.get(month_key, 0)
-
         timeline.append({
             "month": month_key,
-            "estimated_sol": round(month_balance, 4),
-            "tx_count": tx_count,
+            "estimated_sol": round(last_known, 4),
+            "tx_count": monthly_counts.get(month_key, 0),
             "sol_price_usd": sol_price,
-            "estimated_usd": round(month_balance * sol_price, 2),
+            "estimated_usd": round(last_known * sol_price, 2),
         })
 
     return timeline
@@ -798,25 +866,25 @@ async def analyze_wallet(wallet: str) -> dict:
         sig_analysis = _analyze_signatures(signatures)
         token_list_parsed = _analyze_tokens(token_accounts, token_list)
 
-        # Fetch recent transactions for program analysis + swap parsing (max 20, rate limited)
+        # Fetch sampled transactions across full history (max 30 calls, rate limited)
         txn_analysis = {"programs_used": {}, "swap_count": 0, "nft_activity": 0}
         swap_analysis = {
             "total_swaps_detected": 0, "estimated_pnl_sol": 0,
             "biggest_loss": None, "biggest_win": None,
             "win_rate": 0, "total_sol_volume": 0,
         }
-        recent_txns = []
+        sampled_txns = []
         if signatures:
             try:
-                recent_txns = await _get_recent_transactions(client, signatures, limit=20)
-                txn_analysis = _analyze_recent_txns(recent_txns)
+                sampled_txns = await _get_sampled_transactions(client, signatures, wallet, max_calls=30)
+                txn_analysis = _analyze_recent_txns(sampled_txns)
             except Exception:
                 pass
 
             # Extract swaps from parsed transactions
             try:
                 all_swaps = []
-                for tx in recent_txns:
+                for tx in sampled_txns:
                     swaps = _extract_swaps_from_tx(tx, wallet, token_list)
                     all_swaps.extend(swaps)
                 swap_analysis = _analyze_swaps(all_swaps)
@@ -829,18 +897,18 @@ async def analyze_wallet(wallet: str) -> dict:
         # Token graveyard
         graveyard = _analyze_graveyard(token_accounts, token_list)
 
-        # New analytics: net worth timeline, protocol stats, loss breakdown, heatmap
+        # Analytics: net worth timeline, protocol stats, loss breakdown, heatmap
         all_swaps = []
-        if recent_txns:
+        if sampled_txns:
             try:
-                for tx in recent_txns:
+                for tx in sampled_txns:
                     swaps = _extract_swaps_from_tx(tx, wallet, token_list)
                     all_swaps.extend(swaps)
             except Exception:
                 pass
 
-        net_worth_timeline = _build_net_worth_timeline(signatures, recent_txns, wallet)
-        protocol_stats = _build_protocol_stats(recent_txns)
+        net_worth_timeline = _build_net_worth_timeline(signatures, sampled_txns, wallet)
+        protocol_stats = _build_protocol_stats(sampled_txns)
         loss_by_token = _build_loss_by_token(all_swaps)
         loss_by_period = _build_loss_by_period(all_swaps)
         activity_heatmap = _build_activity_heatmap(signatures)
