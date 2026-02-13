@@ -133,6 +133,54 @@ def _funny_error() -> str:
 # --- Routes ---
 
 
+def _compute_achievements(roast: dict, analysis: dict) -> list:
+    """Compute fun achievement badges based on wallet traits."""
+    achievements = []
+    stats = roast.get("wallet_stats", {})
+    score = roast.get("degen_score", 0)
+
+    if score >= 90:
+        achievements.append({"icon": "👑", "name": "Degen Royalty", "desc": "Score 90+"})
+    elif score >= 75:
+        achievements.append({"icon": "🔥", "name": "Certified Degen", "desc": "Score 75+"})
+    elif score <= 10:
+        achievements.append({"icon": "🧊", "name": "Ice Cold", "desc": "Score under 10"})
+
+    if stats.get("shitcoin_count", 0) >= 20:
+        achievements.append({"icon": "🪦", "name": "Token Graveyard", "desc": "20+ dead tokens"})
+    elif stats.get("shitcoin_count", 0) >= 10:
+        achievements.append({"icon": "💀", "name": "Shitcoin Collector", "desc": "10+ dead tokens"})
+
+    if stats.get("failure_rate", 0) >= 30:
+        achievements.append({"icon": "💸", "name": "Transaction Fumbler", "desc": "30%+ failed txns"})
+
+    if stats.get("sol_balance", 0) == 0 and stats.get("token_count", 0) > 0:
+        achievements.append({"icon": "🏜️", "name": "Zero SOL", "desc": "Tokens but no SOL"})
+
+    if stats.get("swap_count", 0) >= 100:
+        achievements.append({"icon": "🎰", "name": "Swap Addict", "desc": "100+ swaps"})
+    elif stats.get("swap_count", 0) >= 50:
+        achievements.append({"icon": "🔄", "name": "Serial Swapper", "desc": "50+ swaps"})
+
+    if stats.get("wallet_age_days") and stats["wallet_age_days"] >= 365 * 3:
+        achievements.append({"icon": "🦕", "name": "OG", "desc": "3+ year old wallet"})
+    elif stats.get("wallet_age_days") and stats["wallet_age_days"] >= 365:
+        achievements.append({"icon": "⏳", "name": "Diamond Hands", "desc": "1+ year old wallet"})
+
+    if stats.get("win_rate", 0) >= 60 and stats.get("total_swaps_detected", 0) >= 10:
+        achievements.append({"icon": "📈", "name": "Actually Good", "desc": "60%+ win rate"})
+    elif stats.get("win_rate", 0) <= 20 and stats.get("total_swaps_detected", 0) >= 10:
+        achievements.append({"icon": "📉", "name": "Exit Liquidity", "desc": "Under 20% win rate"})
+
+    if stats.get("total_sol_volume", 0) >= 1000:
+        achievements.append({"icon": "🐋", "name": "Whale Alert", "desc": "1000+ SOL volume"})
+
+    if stats.get("graveyard_tokens", 0) >= 30:
+        achievements.append({"icon": "☠️", "name": "Necromancer", "desc": "30+ dead tokens"})
+
+    return achievements[:6]  # Cap at 6
+
+
 class RoastRequest(BaseModel):
     wallet: str
 
@@ -165,6 +213,11 @@ async def api_roast(req: RoastRequest, request: Request):
         sentry_sdk.capture_exception(e)
         sentry_sdk.set_context("wallet", {"address": wallet})
         raise HTTPException(status_code=500, detail=_funny_error())
+
+    # Add percentile and achievements
+    score = roast.get("degen_score", 0)
+    roast["percentile"] = db.get_percentile(score)
+    roast["achievements"] = _compute_achievements(roast, analysis)
 
     _set_cache(wallet, roast)
     _record_rate_limit(ip, wallet)
@@ -199,6 +252,11 @@ async def api_roast_image(wallet: str):
 @app.get("/api/stats")
 async def api_stats():
     return db.get_stats()
+
+
+@app.get("/api/leaderboard")
+async def api_leaderboard():
+    return db.get_leaderboard(20)
 
 
 @app.get("/api/recent")

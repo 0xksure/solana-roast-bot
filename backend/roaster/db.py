@@ -103,5 +103,42 @@ def get_stats() -> dict:
     conn = _get_conn()
     total = conn.execute("SELECT COUNT(*) as c FROM roasts").fetchone()["c"]
     unique = conn.execute("SELECT COUNT(DISTINCT wallet) as c FROM roasts").fetchone()["c"]
+    avg_score = conn.execute(
+        "SELECT AVG(json_extract(roast_json, '$.degen_score')) as avg FROM roasts"
+    ).fetchone()["avg"]
     conn.close()
-    return {"total_roasts": total, "unique_wallets": unique}
+    return {"total_roasts": total, "unique_wallets": unique, "avg_degen_score": round(avg_score or 0, 1)}
+
+
+def get_leaderboard(limit: int = 10) -> list:
+    """Get top degen scores."""
+    conn = _get_conn()
+    rows = conn.execute("""
+        SELECT wallet, roast_json, created_at,
+               json_extract(roast_json, '$.degen_score') as score
+        FROM roasts
+        ORDER BY score DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+    return [{
+        "wallet": r["wallet"],
+        "title": json.loads(r["roast_json"]).get("title", ""),
+        "degen_score": r["score"],
+        "created_at": r["created_at"],
+    } for r in rows]
+
+
+def get_percentile(score: int) -> float:
+    """What percentile is this score? Returns 0-100."""
+    conn = _get_conn()
+    total = conn.execute("SELECT COUNT(*) as c FROM roasts").fetchone()["c"]
+    if total == 0:
+        conn.close()
+        return 50.0
+    below = conn.execute(
+        "SELECT COUNT(*) as c FROM roasts WHERE json_extract(roast_json, '$.degen_score') < ?",
+        (score,)
+    ).fetchone()["c"]
+    conn.close()
+    return round((below / total) * 100, 1)

@@ -6,7 +6,9 @@ import Loading from './components/Loading';
 import RoastResult from './components/RoastResult';
 import WalletAutopsy from './components/WalletAutopsy';
 import StatsCards from './components/StatsCards';
+import Achievements from './components/Achievements';
 import ShareActions from './components/ShareActions';
+import Leaderboard from './components/Leaderboard';
 import RecentRoasts from './components/RecentRoasts';
 import Footer from './components/Footer';
 import { useRoast } from './hooks/useRoast';
@@ -61,6 +63,7 @@ export default function App() {
           <div className="result active">
             <div className="result-card">
               <RoastResult roast={roast} wallet={wallet} />
+              <Achievements achievements={roast.achievements} percentile={roast.percentile} />
               <StatsCards stats={roast.wallet_stats} />
               <WalletAutopsy stats={roast.wallet_stats} />
               <ShareActions roast={roast} wallet={wallet} onReset={reset} />
@@ -68,6 +71,7 @@ export default function App() {
           </div>
         )}
 
+        {!loading && <Leaderboard visible={!roast} onRoast={doRoast} />}
         {!loading && <RecentRoasts visible={!roast} />}
         <Footer />
       </div>
