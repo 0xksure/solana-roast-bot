@@ -6,6 +6,7 @@
 <title>Solana Roast Bot 🔥 — How Degen Is Your Wallet?</title>
 <meta name="description" content="Get your Solana wallet roasted by AI. Degen score, savage roast lines, and a shareable card. How degenerate is your on-chain activity?">
 <meta name="keywords" content="Solana, wallet roast, degen score, crypto roast, Solana wallet analyzer, meme, web3">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 <script src="https://browser.sentry-cdn.com/8.45.0/bundle.tracing.min.js" crossorigin="anonymous"></script>
 <script>
 if (window.Sentry) {
@@ -265,6 +266,22 @@ body::before{
 .footer a{color:var(--purple);text-decoration:none;transition:color .2s}
 .footer a:hover{color:var(--cyan);text-decoration:underline}
 
+/* Autopsy Section */
+.autopsy-section{margin:32px 0}
+.autopsy-title{font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:700;text-align:center;
+  color:var(--cyan);margin-bottom:24px;text-shadow:0 0 10px rgba(0,240,255,0.3)}
+.autopsy-stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:24px}
+.autopsy-stat{background:rgba(15,15,35,0.6);backdrop-filter:blur(10px);border:1px solid var(--glass-border);
+  border-radius:12px;padding:16px 12px;text-align:center;transition:all .3s}
+.autopsy-stat:hover{border-color:var(--cyan);box-shadow:0 0 15px rgba(0,240,255,0.15)}
+.autopsy-stat .val{font-family:'Orbitron',sans-serif;font-size:1.2rem;font-weight:700;color:var(--cyan)}
+.autopsy-stat .label{font-size:.7rem;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:1px}
+.chart-card{background:rgba(15,15,35,0.6);backdrop-filter:blur(10px);border:1px solid var(--glass-border);
+  border-radius:16px;padding:20px;margin-bottom:16px}
+.chart-card h4{font-family:'Orbitron',sans-serif;font-size:.85rem;color:var(--purple);margin-bottom:12px;
+  text-transform:uppercase;letter-spacing:2px}
+.chart-card canvas{width:100%!important;max-height:300px}
+
 /* Mobile */
 @media(max-width:768px){
   body::after{display:none}
@@ -282,6 +299,8 @@ body::before{
   .score-num{font-size:2.2rem}
   .actions{flex-direction:column}
   .actions button{width:100%;min-height:48px}
+  .autopsy-stats-row{grid-template-columns:repeat(2,1fr)}
+  .chart-card canvas{max-height:250px}
 }
 </style>
 </head>
@@ -349,6 +368,29 @@ body::before{
       </div>
       <div class="roast-lines" id="roastLines"></div>
       <div class="stats-grid" id="statsGrid"></div>
+
+      <!-- Wallet Autopsy Charts -->
+      <div class="autopsy-section" id="autopsySection" style="display:none">
+        <div class="autopsy-title">📊 Your Wallet Autopsy</div>
+        <div class="autopsy-stats-row" id="autopsyStatsRow"></div>
+        <div class="chart-card" id="chartNetWorthCard" style="display:none">
+          <h4>💰 Net Worth Over Time</h4>
+          <canvas id="chartNetWorth"></canvas>
+        </div>
+        <div class="chart-card" id="chartProtocolCard" style="display:none">
+          <h4>🔄 Protocol Usage</h4>
+          <canvas id="chartProtocol"></canvas>
+        </div>
+        <div class="chart-card" id="chartActivityCard" style="display:none">
+          <h4>📈 Monthly Activity</h4>
+          <canvas id="chartActivity"></canvas>
+        </div>
+        <div class="chart-card" id="chartLossCard" style="display:none">
+          <h4>💸 Where You Lost Money</h4>
+          <canvas id="chartLoss"></canvas>
+        </div>
+      </div>
+
       <div class="actions">
         <button class="btn-twitter" onclick="shareTwitter()">Share on 𝕏</button>
         <button class="btn-secondary btn-copy" onclick="copyShareLink()">🔗 Copy Link <span class="copied" id="copiedMsg">Copied!</span></button>
@@ -536,6 +578,9 @@ function showResult(r) {
     items.forEach(([val, label]) => {
       grid.innerHTML += `<div class="stat-item"><div class="stat-val">${val}</div><div class="stat-label">${label}</div></div>`;
     });
+
+    // Render charts
+    renderAutopsy(stats);
   }, 400);
 }
 
@@ -613,6 +658,174 @@ async function loadRecent() {
       list.innerHTML += `<div class="recent-item"><span class="recent-title">"${esc(r.title)}"</span><span class="recent-score">${r.degen_score}/100</span></div>`;
     });
   } catch(e) {}
+}
+
+// --- Chart instances (destroy before recreating) ---
+let chartInstances = {};
+function destroyCharts() {
+  Object.values(chartInstances).forEach(c => c.destroy());
+  chartInstances = {};
+}
+
+function renderAutopsy(stats) {
+  destroyCharts();
+  const section = document.getElementById('autopsySection');
+  const hasTimeline = stats.net_worth_timeline && stats.net_worth_timeline.length > 0;
+  const hasProtocol = stats.protocol_stats && stats.protocol_stats.length > 0;
+  const hasLoss = stats.loss_by_token && stats.loss_by_token.length > 0;
+
+  if (!hasTimeline && !hasProtocol && !hasLoss) { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  // Chart.js defaults
+  if (window.Chart) {
+    Chart.defaults.color = '#7c7394';
+    Chart.defaults.borderColor = 'rgba(153,69,255,0.1)';
+    Chart.defaults.font.family = 'Inter';
+  }
+
+  // Stats cards row
+  const row = document.getElementById('autopsyStatsRow');
+  row.innerHTML = '';
+  const statItems = [
+    [stats.total_sol_volume ? stats.total_sol_volume.toFixed(1) + ' SOL' : '—', 'Volume Traded'],
+    [stats.win_rate != null ? Math.round(stats.win_rate * 100) + '%' : '—', 'Win Rate'],
+    [stats.biggest_loss ? stats.biggest_loss.sol_spent + ' SOL' : '—', 'Biggest Loss'],
+    [hasProtocol ? stats.protocol_stats[0].name : '—', 'Top Protocol'],
+    [stats.graveyard_tokens ?? '—', 'Graveyard Tokens'],
+    [stats.peak_activity_period ? stats.peak_activity_period.period : '—', 'Peak Month'],
+  ];
+  statItems.forEach(([v, l]) => {
+    row.innerHTML += `<div class="autopsy-stat"><div class="val">${v}</div><div class="label">${l}</div></div>`;
+  });
+
+  // Chart 1: Net Worth Timeline
+  if (hasTimeline) {
+    document.getElementById('chartNetWorthCard').style.display = '';
+    const ctx = document.getElementById('chartNetWorth').getContext('2d');
+    const tl = stats.net_worth_timeline;
+    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+    gradient.addColorStop(0, 'rgba(153,69,255,0.4)');
+    gradient.addColorStop(1, 'rgba(153,69,255,0)');
+    chartInstances.netWorth = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: tl.map(d => d.month),
+        datasets: [{
+          label: 'Est. USD Value',
+          data: tl.map(d => d.estimated_usd),
+          borderColor: '#00f0ff',
+          backgroundColor: gradient,
+          fill: true, tension: 0.4, pointRadius: 2, borderWidth: 2,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(153,69,255,0.08)' } },
+          y: { grid: { color: 'rgba(153,69,255,0.08)' }, ticks: { callback: v => '$' + v.toLocaleString() } }
+        }
+      }
+    });
+  } else { document.getElementById('chartNetWorthCard').style.display = 'none'; }
+
+  // Chart 2: Protocol Usage Doughnut
+  if (hasProtocol) {
+    document.getElementById('chartProtocolCard').style.display = '';
+    const ctx2 = document.getElementById('chartProtocol').getContext('2d');
+    const top5 = stats.protocol_stats.filter(p => !['System','Token Program','Associated Token'].includes(p.name)).slice(0, 5);
+    const colors = ['#00f0ff', '#9945ff', '#ff6b2b', '#ff2d78', '#22c55e'];
+    const total = top5.reduce((s, p) => s + p.tx_count, 0);
+    chartInstances.protocol = new Chart(ctx2, {
+      type: 'doughnut',
+      data: {
+        labels: top5.map(p => p.name),
+        datasets: [{ data: top5.map(p => p.tx_count), backgroundColor: colors.slice(0, top5.length), borderWidth: 0 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '65%',
+        plugins: {
+          legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true } },
+        }
+      },
+      plugins: [{
+        id: 'centerText',
+        beforeDraw(chart) {
+          const { ctx, width, height } = chart;
+          ctx.save();
+          ctx.font = 'bold 24px Orbitron';
+          ctx.fillStyle = '#00f0ff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(total, width / 2, height / 2 - 8);
+          ctx.font = '11px Inter';
+          ctx.fillStyle = '#7c7394';
+          ctx.fillText('interactions', width / 2, height / 2 + 14);
+          ctx.restore();
+        }
+      }]
+    });
+  } else { document.getElementById('chartProtocolCard').style.display = 'none'; }
+
+  // Chart 3: Monthly Activity
+  if (hasTimeline) {
+    document.getElementById('chartActivityCard').style.display = '';
+    const ctx3 = document.getElementById('chartActivity').getContext('2d');
+    const tl = stats.net_worth_timeline;
+    const maxTx = Math.max(...tl.map(d => d.tx_count));
+    chartInstances.activity = new Chart(ctx3, {
+      type: 'bar',
+      data: {
+        labels: tl.map(d => d.month),
+        datasets: [{
+          label: 'Transactions',
+          data: tl.map(d => d.tx_count),
+          backgroundColor: tl.map(d => {
+            const r = d.tx_count / (maxTx || 1);
+            return r > 0.66 ? '#ff2d78' : r > 0.33 ? '#ff6b2b' : '#00f0ff';
+          }),
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false } },
+          y: { grid: { color: 'rgba(153,69,255,0.08)' } }
+        }
+      }
+    });
+  } else { document.getElementById('chartActivityCard').style.display = 'none'; }
+
+  // Chart 4: Loss by Token
+  if (hasLoss) {
+    document.getElementById('chartLossCard').style.display = '';
+    const ctx4 = document.getElementById('chartLoss').getContext('2d');
+    const top5loss = stats.loss_by_token.slice(0, 5);
+    chartInstances.loss = new Chart(ctx4, {
+      type: 'bar',
+      data: {
+        labels: top5loss.map(d => d.token),
+        datasets: [{
+          label: 'SOL Lost',
+          data: top5loss.map(d => d.sol_lost),
+          backgroundColor: 'rgba(239,68,68,0.7)',
+          borderColor: '#ef4444',
+          borderWidth: 1, borderRadius: 4,
+        }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(153,69,255,0.08)' }, ticks: { callback: v => v + ' SOL' } },
+          y: { grid: { display: false } }
+        }
+      }
+    });
+  } else { document.getElementById('chartLossCard').style.display = 'none'; }
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }

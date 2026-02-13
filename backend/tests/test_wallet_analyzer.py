@@ -7,7 +7,13 @@ from backend.roaster.wallet_analyzer import (
     _analyze_timeline,
     _analyze_graveyard,
     _extract_swaps_from_tx,
+    _build_net_worth_timeline,
+    _build_protocol_stats,
+    _build_loss_by_token,
+    _build_loss_by_period,
+    _build_activity_heatmap,
     MARKET_EVENTS,
+    SOL_PRICE_HISTORY,
 )
 
 
@@ -260,3 +266,116 @@ def test_market_events_keys():
         assert "-" in key
         assert "event" in val
         assert "sentiment" in val
+
+
+# --- Net Worth Timeline Tests ---
+
+def test_build_net_worth_timeline_empty():
+    result = _build_net_worth_timeline([], [], "WALLET")
+    assert result == []
+
+
+def test_build_net_worth_timeline_basic():
+    from datetime import datetime, timezone
+    ts_base = int(datetime(2024, 1, 15, tzinfo=timezone.utc).timestamp())
+    sigs = [{"blockTime": ts_base + i * 3600, "signature": f"s{i}"} for i in range(5)]
+    result = _build_net_worth_timeline(sigs, [], "WALLET")
+    assert len(result) == 1
+    assert result[0]["month"] == "2024-01"
+    assert result[0]["tx_count"] == 5
+    assert result[0]["sol_price_usd"] == 95.0  # from SOL_PRICE_HISTORY
+
+
+def test_build_net_worth_timeline_with_tx_balances():
+    from datetime import datetime, timezone
+    ts = int(datetime(2024, 3, 10, tzinfo=timezone.utc).timestamp())
+    wallet = "WALLETxyz"
+    sigs = [{"blockTime": ts, "signature": "s1"}]
+    txns = [{
+        "blockTime": ts,
+        "transaction": {"message": {"accountKeys": [wallet], "instructions": []}},
+        "meta": {"postBalances": [5_000_000_000], "innerInstructions": []},
+    }]
+    result = _build_net_worth_timeline(sigs, txns, wallet)
+    assert len(result) == 1
+    assert result[0]["estimated_sol"] == 5.0
+    assert result[0]["estimated_usd"] == 5.0 * 185.0  # 2024-03 price
+
+
+# --- Protocol Stats Tests ---
+
+def test_build_protocol_stats_empty():
+    assert _build_protocol_stats([]) == []
+
+
+def test_build_protocol_stats():
+    txns = [{
+        "transaction": {"message": {"instructions": [
+            {"programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"},
+            {"programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"},  # duplicate in same tx
+            {"programId": "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"},
+        ]}},
+        "meta": {"innerInstructions": []},
+    }]
+    result = _build_protocol_stats(txns)
+    names = {r["name"] for r in result}
+    assert "Jupiter" in names
+    assert "Raydium" in names
+    # Jupiter should count once per tx (deduped)
+    jup = next(r for r in result if r["name"] == "Jupiter")
+    assert jup["tx_count"] == 1
+
+
+# --- Loss by Token Tests ---
+
+def test_build_loss_by_token_empty():
+    assert _build_loss_by_token([]) == []
+
+
+def test_build_loss_by_token():
+    swaps = [
+        {"token_in": {"symbol": "SOL", "amount": 5.0}, "token_out": {"symbol": "BONK", "amount": 1000000}, "sol_change": -5.0},
+        {"token_in": {"symbol": "SOL", "amount": 3.0}, "token_out": {"symbol": "BONK", "amount": 500000}, "sol_change": -3.0},
+        {"token_in": {"symbol": "BONK", "amount": 500000}, "token_out": {"symbol": "SOL", "amount": 2.0}, "sol_change": 2.0},
+    ]
+    result = _build_loss_by_token(swaps)
+    assert len(result) == 1  # BONK: 5+3-2 = 6 SOL net loss
+    assert result[0]["token"] == "BONK"
+    assert result[0]["sol_lost"] == 6.0
+
+
+# --- Loss by Period Tests ---
+
+def test_build_loss_by_period():
+    from datetime import datetime, timezone
+    ts = int(datetime(2024, 3, 15, tzinfo=timezone.utc).timestamp())
+    swaps = [
+        {"timestamp": ts, "sol_change": -5.0, "token_in": {"symbol": "SOL", "amount": 5.0}, "token_out": {"symbol": "BONK"}},
+    ]
+    result = _build_loss_by_period(swaps)
+    assert len(result) == 1
+    assert result[0]["month"] == "2024-03"
+    assert result[0]["sol_lost"] == 5.0
+    assert "BONK" in result[0].get("event", "")  # 2024-03 has BONK/WIF mania event
+
+
+# --- Activity Heatmap Tests ---
+
+def test_build_activity_heatmap_empty():
+    assert _build_activity_heatmap([]) == {}
+
+
+def test_build_activity_heatmap():
+    from datetime import datetime, timezone
+    # Jan 6, 2024 is a Saturday, 14:00 UTC
+    ts = int(datetime(2024, 1, 6, 14, 0, tzinfo=timezone.utc).timestamp())
+    sigs = [{"blockTime": ts}, {"blockTime": ts + 60}]
+    result = _build_activity_heatmap(sigs)
+    assert result.get("sat_14") == 2
+
+
+def test_sol_price_history_coverage():
+    """Ensure price history covers 2021-2026."""
+    assert "2021-01" in SOL_PRICE_HISTORY
+    assert "2026-02" in SOL_PRICE_HISTORY
+    assert all(v > 0 for v in SOL_PRICE_HISTORY.values())

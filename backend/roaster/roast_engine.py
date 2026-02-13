@@ -199,6 +199,15 @@ async def generate_roast(analysis: dict) -> dict:
         "total_swaps_detected": analysis.get("total_swaps_detected", 0),
         "win_rate": analysis.get("win_rate", 0),
         "graveyard_tokens": analysis.get("graveyard_tokens", 0),
+        "total_sol_volume": analysis.get("total_sol_volume", 0),
+        "biggest_loss": analysis.get("biggest_loss"),
+        "peak_activity_period": analysis.get("peak_activity_period"),
+        # Chart data
+        "net_worth_timeline": analysis.get("net_worth_timeline", []),
+        "protocol_stats": analysis.get("protocol_stats", []),
+        "loss_by_token": analysis.get("loss_by_token", []),
+        "loss_by_period": analysis.get("loss_by_period", []),
+        "activity_heatmap": analysis.get("activity_heatmap", {}),
     }
 
     return roast
