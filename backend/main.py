@@ -239,6 +239,11 @@ async def api_roast_image(wallet: str):
     wallet = _validate_wallet(wallet)
     cached = _get_cached(wallet)
     if not cached:
+        # Try DB
+        history = db.get_roast_history(wallet, limit=1)
+        if history:
+            cached = history[0]["roast"]
+    if not cached:
         raise HTTPException(status_code=404, detail="Roast not found. Generate one first.")
 
     try:
@@ -307,6 +312,10 @@ async def api_roast_page(wallet: str, request: Request):
     wallet = _validate_wallet(wallet)
     cached = _get_cached(wallet)
     if not cached:
+        history = db.get_roast_history(wallet, limit=1)
+        if history:
+            cached = history[0]["roast"]
+    if not cached:
         safe = html.escape(wallet)
         return HTMLResponse(
             f'<html><head><script>window.location.href="/?wallet={safe}";</script></head></html>'
@@ -342,6 +351,10 @@ async def wallet_page(wallet: str, request: Request):
     except HTTPException:
         raise HTTPException(status_code=404)
     cached = _get_cached(wallet)
+    if not cached:
+        history = db.get_roast_history(wallet, limit=1)
+        if history:
+            cached = history[0]["roast"]
     if cached:
         base_url = str(request.base_url).rstrip("/")
         return HTMLResponse(_og_html(wallet, cached, base_url))
