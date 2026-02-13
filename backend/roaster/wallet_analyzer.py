@@ -149,9 +149,22 @@ async def _get_sol_price(client: httpx.AsyncClient) -> float:
     return 0.0
 
 
-async def _get_signatures(client: httpx.AsyncClient, wallet: str, limit: int = 1000) -> list:
-    result = await _rpc(client, "getSignaturesForAddress", [wallet, {"limit": limit}])
-    return result or []
+async def _get_signatures(client: httpx.AsyncClient, wallet: str, limit: int = 1000, max_pages: int = 5) -> list:
+    """Fetch transaction signatures with pagination for deeper history."""
+    all_sigs = []
+    before = None
+    for _ in range(max_pages):
+        opts = {"limit": limit}
+        if before:
+            opts["before"] = before
+        result = await _rpc(client, "getSignaturesForAddress", [wallet, opts])
+        if not result:
+            break
+        all_sigs.extend(result)
+        if len(result) < limit:
+            break  # No more pages
+        before = result[-1].get("signature")
+    return all_sigs
 
 
 async def _get_token_accounts(client: httpx.AsyncClient, wallet: str) -> list:
