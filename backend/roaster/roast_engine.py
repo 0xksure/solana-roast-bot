@@ -85,7 +85,11 @@ def _build_prompt(analysis: dict) -> str:
 
 async def generate_roast(analysis: dict) -> dict:
     """Generate a roast from wallet analysis. Returns roast dict."""
-    client = anthropic.AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    raw_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    api_key = "".join(raw_key.split())  # DO App Platform injects newlines in long secrets
+    if not api_key:
+        raise ValueError("ANTHROPIC_API_KEY not set")
+    client = anthropic.AsyncAnthropic(api_key=api_key)
 
     prompt = _build_prompt(analysis)
 
