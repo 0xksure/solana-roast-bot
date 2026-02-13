@@ -59,7 +59,8 @@ async def test_generate_roast():
         "summary": "Test summary"
     }))]
 
-    with patch("backend.roaster.roast_engine.anthropic.AsyncAnthropic") as mock_cls:
+    with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test-key"}), \
+         patch("backend.roaster.roast_engine.anthropic.AsyncAnthropic") as mock_cls:
         mock_client = AsyncMock()
         mock_client.messages.create = AsyncMock(return_value=mock_response)
         mock_cls.return_value = mock_client
