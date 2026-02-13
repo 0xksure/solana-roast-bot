@@ -119,6 +119,15 @@ body::before{
 .btn:active{transform:skewX(-3deg) translateY(0)}
 .btn:disabled{opacity:.5;cursor:not-allowed;transform:skewX(-3deg)}
 
+.wallet-connect-divider{display:flex;align-items:center;gap:16px;margin:18px auto;max-width:560px}
+.divider-line{flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(153,69,255,0.3),transparent)}
+.divider-text{color:var(--muted);font-size:.8rem;font-family:'Orbitron',sans-serif;letter-spacing:2px}
+.btn-connect{background:rgba(15,15,35,0.7);backdrop-filter:blur(12px);border:1px solid rgba(153,69,255,0.4);
+  color:var(--purple);border-radius:12px;padding:14px 32px;font-size:.95rem;font-weight:600;cursor:pointer;
+  font-family:'Orbitron',sans-serif;letter-spacing:1px;transition:all .3s;display:inline-flex;align-items:center}
+.btn-connect:hover{border-color:var(--purple);box-shadow:0 0 20px rgba(153,69,255,0.3);color:#fff;background:rgba(153,69,255,0.15)}
+.wallet-status{text-align:center;margin-top:10px;font-size:.85rem;color:var(--cyan);font-family:'Orbitron',sans-serif}
+.wallet-status .connected{color:var(--green)}
 .examples{text-align:center;margin-top:18px;font-size:.85rem;color:var(--muted)}
 .examples span{cursor:pointer;color:var(--cyan);text-decoration:none;margin:0 8px;
   border-bottom:1px solid transparent;transition:all .2s;padding-bottom:2px}
@@ -327,6 +336,16 @@ body::before{
       <input type="text" id="walletInput" placeholder="Paste your Solana wallet address..." autocomplete="off" spellcheck="false">
       <button class="btn" id="roastBtn" onclick="doRoast()">ROAST ME 🔥</button>
     </div>
+    <div class="wallet-connect-divider">
+      <span class="divider-line"></span>
+      <span class="divider-text">OR</span>
+      <span class="divider-line"></span>
+    </div>
+    <button class="btn-connect" id="connectBtn" onclick="connectWallet()">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="vertical-align:middle;margin-right:8px"><rect width="20" height="20" rx="4" fill="rgba(153,69,255,0.3)"/><path d="M5 7h10M5 10h10M5 13h7" stroke="#9945ff" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Connect Wallet
+    </button>
+    <div id="walletStatus" class="wallet-status" style="display:none"></div>
     <div class="examples">
       Try a famous wallet:
       <span onclick="tryWallet('toly.sol','CKs1E69a2e9TmH4mKKLrXFF8kD3ZnwKjoEuXa6sz9WqX')">Toly</span>
@@ -831,6 +850,135 @@ function renderAutopsy(stats) {
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function show(id) { document.getElementById(id).style.display = ''; document.getElementById(id).classList?.add('active'); }
 function hide(id) { const el = document.getElementById(id); el.style.display = 'none'; el.classList?.remove('active'); }
+
+// === Wallet Connect ===
+function getWalletProviders() {
+  const providers = [];
+  // Phantom
+  if (window.phantom?.solana?.isPhantom) {
+    providers.push({ name: 'Phantom', icon: '👻', provider: window.phantom.solana });
+  }
+  // Solflare
+  if (window.solflare?.isSolflare) {
+    providers.push({ name: 'Solflare', icon: '🔆', provider: window.solflare });
+  }
+  // Backpack
+  if (window.backpack?.isBackpack) {
+    providers.push({ name: 'Backpack', icon: '🎒', provider: window.backpack });
+  }
+  // Coinbase Wallet
+  if (window.coinbaseSolana) {
+    providers.push({ name: 'Coinbase', icon: '🔵', provider: window.coinbaseSolana });
+  }
+  // Generic fallback (Wallet Standard)
+  if (!providers.length && window.solana) {
+    providers.push({ name: 'Wallet', icon: '💳', provider: window.solana });
+  }
+  return providers;
+}
+
+let connectedProvider = null;
+
+async function connectWallet() {
+  const providers = getWalletProviders();
+  
+  if (providers.length === 0) {
+    // No wallet detected — show install prompt
+    const statusEl = document.getElementById('walletStatus');
+    statusEl.style.display = 'block';
+    statusEl.innerHTML = '<span style="color:var(--orange)">No Solana wallet detected.</span> Install <a href="https://phantom.app" target="_blank" style="color:var(--cyan)">Phantom</a> or <a href="https://solflare.com" target="_blank" style="color:var(--cyan)">Solflare</a>';
+    return;
+  }
+
+  // If only one provider, connect directly. If multiple, pick first (most common = Phantom)
+  let selectedProvider;
+  if (providers.length === 1) {
+    selectedProvider = providers[0];
+  } else {
+    // Show a quick picker modal
+    selectedProvider = await showWalletPicker(providers);
+    if (!selectedProvider) return;
+  }
+
+  try {
+    const btn = document.getElementById('connectBtn');
+    btn.textContent = 'Connecting...';
+    btn.disabled = true;
+    
+    const resp = await selectedProvider.provider.connect();
+    const pubkey = resp.publicKey.toString();
+    connectedProvider = selectedProvider.provider;
+    
+    // Show connected state
+    const statusEl = document.getElementById('walletStatus');
+    statusEl.style.display = 'block';
+    statusEl.innerHTML = `<span class="connected">✓ Connected via ${selectedProvider.name}</span> — ${pubkey.slice(0,4)}...${pubkey.slice(-4)}`;
+    
+    // Fill input and auto-roast
+    document.getElementById('walletInput').value = pubkey;
+    btn.textContent = 'Connected ✓';
+    btn.style.borderColor = 'var(--green)';
+    btn.style.color = 'var(--green)';
+    
+    // Auto-roast after connecting
+    setTimeout(() => doRoast(), 500);
+  } catch (err) {
+    console.error('Wallet connect error:', err);
+    const statusEl = document.getElementById('walletStatus');
+    statusEl.style.display = 'block';
+    statusEl.innerHTML = `<span style="color:var(--orange)">${err.message || 'Connection rejected'}</span>`;
+    const btn = document.getElementById('connectBtn');
+    btn.textContent = 'Connect Wallet';
+    btn.disabled = false;
+  }
+}
+
+function showWalletPicker(providers) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(8px);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:rgba(15,15,35,0.95);border:1px solid rgba(153,69,255,0.4);border-radius:20px;padding:28px;max-width:320px;width:90%;box-shadow:0 0 40px rgba(153,69,255,0.2);';
+    modal.innerHTML = '<h3 style="font-family:Orbitron,sans-serif;color:#fff;text-align:center;margin-bottom:20px;font-size:1rem">SELECT WALLET</h3>';
+    
+    providers.forEach(p => {
+      const btn = document.createElement('button');
+      btn.style.cssText = 'display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.2);border-radius:12px;color:#fff;font-size:.95rem;cursor:pointer;margin-bottom:8px;transition:all .2s;';
+      btn.innerHTML = `<span style="font-size:1.5rem">${p.icon}</span> ${p.name}`;
+      btn.onmouseover = () => { btn.style.borderColor = 'var(--purple)'; btn.style.background = 'rgba(153,69,255,0.15)'; };
+      btn.onmouseout = () => { btn.style.borderColor = 'rgba(153,69,255,0.2)'; btn.style.background = 'rgba(153,69,255,0.08)'; };
+      btn.onclick = () => { overlay.remove(); resolve(p); };
+      modal.appendChild(btn);
+    });
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.style.cssText = 'width:100%;padding:10px;background:none;border:none;color:var(--muted);cursor:pointer;margin-top:8px;font-size:.85rem;';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = () => { overlay.remove(); resolve(null); };
+    modal.appendChild(cancelBtn);
+    
+    overlay.onclick = (e) => { if (e.target === overlay) { overlay.remove(); resolve(null); } };
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+  });
+}
+
+// Reset connect button on resetUI
+const _origResetUI = resetUI;
+resetUI = function() {
+  _origResetUI();
+  const btn = document.getElementById('connectBtn');
+  btn.textContent = 'Connect Wallet';
+  btn.disabled = false;
+  btn.style.borderColor = '';
+  btn.style.color = '';
+  document.getElementById('walletStatus').style.display = 'none';
+  if (connectedProvider) {
+    try { connectedProvider.disconnect(); } catch(e) {}
+    connectedProvider = null;
+  }
+};
 </script>
 </body>
 </html>
