@@ -12,19 +12,23 @@ MOCK_ANALYSIS = {
     "sol_usd": 2500.0,
     "sol_price": 200.0,
     "token_count": 8,
-    "top_tokens": [{"symbol": "BONK", "amount": 5000000, "is_memecoin": True, "mint": "x", "decimals": 5}],
-    "helius_tokens": [],
+    "top_tokens": [{"symbol": "BONK", "amount": 5000000, "is_known": True, "mint": "x", "decimals": 5}],
     "dust_tokens": 3,
-    "memecoin_count": 2,
+    "known_token_count": 2,
+    "shitcoin_count": 5,
     "transaction_count": 142,
     "failed_transactions": 12,
+    "failure_rate": 8.5,
     "wallet_age_days": 365,
     "first_tx_date": "2024-01-01T00:00:00+00:00",
+    "late_night_txs": 23,
+    "txs_per_day": 0.4,
+    "burst_count": 3,
+    "hour_distribution": {},
     "swap_count": 45,
     "protocols_used": ["Jupiter", "Raydium"],
     "nft_activity": 5,
-    "tx_types": {"SWAP": 45, "TRANSFER": 80},
-    "has_helius": True,
+    "is_empty": False,
 }
 
 
@@ -34,6 +38,14 @@ def test_build_prompt():
     assert "142" in prompt
     assert "BONK" in prompt
     assert "Jupiter" in prompt
+    assert "8.5%" in prompt
+    assert "Late Night" in prompt
+
+
+def test_build_prompt_empty_wallet():
+    empty = {**MOCK_ANALYSIS, "is_empty": True, "sol_balance": 0, "token_count": 0, "transaction_count": 0}
+    prompt = _build_prompt(empty)
+    assert "GHOST WALLET" in prompt
 
 
 @pytest.mark.asyncio
@@ -57,3 +69,4 @@ async def test_generate_roast():
         assert len(result["roast_lines"]) == 3
         assert result["degen_score"] == 72
         assert "wallet_stats" in result
+        assert result["wallet_stats"]["failure_rate"] == 8.5

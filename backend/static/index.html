@@ -3,11 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Solana Roast Bot 🔥</title>
+<title>Solana Roast Bot 🔥 — How Degen Is Your Wallet?</title>
+<meta name="description" content="Get your Solana wallet roasted by AI. Degen score, savage roast lines, and a shareable card. How degenerate is your on-chain activity?">
+<meta name="keywords" content="Solana, wallet roast, degen score, crypto roast, Solana wallet analyzer, meme, web3">
 <meta property="og:title" content="Solana Roast Bot 🔥">
-<meta property="og:description" content="How degen is your Solana wallet? Get roasted.">
+<meta property="og:description" content="How degen is your Solana wallet? Get roasted by AI.">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0a0515;--card:#130d24;--purple:#8b5cf6;--orange:#ff7832;--pink:#f472b6;--text:#e2ddf5;--muted:#7c7394;--green:#22c55e;--red:#ef4444;--yellow:#eab308}
@@ -17,12 +20,10 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,Bl
 
 .container{max-width:700px;margin:0 auto;padding:20px 16px}
 
-/* Hero */
-.hero{text-align:center;padding:60px 0 40px}
+.hero{text-align:center;padding:60px 0 30px}
 .hero h1{font-size:3rem;font-weight:700;margin-bottom:12px;background:linear-gradient(135deg,var(--orange),var(--pink),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .hero p{color:var(--muted);font-size:1.1rem;margin-bottom:32px}
 
-/* Input */
 .input-wrap{display:flex;gap:10px;max-width:560px;margin:0 auto}
 .input-wrap input{flex:1;background:var(--card);border:2px solid #2a1f42;border-radius:12px;padding:16px 20px;color:var(--text);font-size:1rem;outline:none;transition:border-color .2s}
 .input-wrap input:focus{border-color:var(--purple)}
@@ -33,27 +34,30 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,Bl
 .btn:active{transform:translateY(0)}
 .btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
 
-/* Fire particles on button */
-.btn::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(255,120,50,.2) 0%,transparent 70%);animation:pulse 2s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
+.examples{text-align:center;margin-top:16px;font-size:.85rem;color:var(--muted)}
+.examples span{cursor:pointer;color:var(--purple);text-decoration:underline;margin:0 6px;transition:color .2s}
+.examples span:hover{color:var(--orange)}
 
-/* Loading */
+/* Loading with progress */
 .loading{text-align:center;padding:60px 0;display:none}
 .loading.active{display:block}
-.spinner{width:60px;height:60px;border:4px solid #2a1f42;border-top-color:var(--orange);border-radius:50%;margin:0 auto 24px;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
+.progress-wrap{max-width:400px;margin:0 auto 24px;background:#1a1030;border-radius:12px;height:8px;overflow:hidden}
+.progress-bar{height:100%;background:linear-gradient(90deg,var(--orange),var(--pink));border-radius:12px;transition:width .3s ease;width:0%}
 .loading-msg{color:var(--orange);font-size:1.2rem;font-weight:700;min-height:30px}
+.loading-pct{color:var(--muted);font-size:.85rem;margin-top:8px}
 
-/* Result */
+/* Fire particles */
+.fire-particles{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1000;display:none}
+.fire-particles.active{display:block}
+.fire-particle{position:absolute;top:-20px;width:12px;height:12px;border-radius:50%;animation:fireFall linear forwards;opacity:0}
+@keyframes fireFall{0%{opacity:1;transform:translateY(0) rotate(0deg) scale(1)}50%{opacity:.8}100%{opacity:0;transform:translateY(100vh) rotate(720deg) scale(0.3)}}
+
 .result{display:none;padding:20px 0}
 .result.active{display:block}
-
 .result-card{background:var(--card);border-radius:20px;padding:32px 28px;border:1px solid #2a1f42;margin-bottom:20px}
-
 .result-title{font-size:2rem;font-weight:700;text-align:center;margin-bottom:8px;color:var(--orange);animation:fadeInUp .6s ease}
 .result-summary{text-align:center;color:var(--muted);margin-bottom:28px;animation:fadeInUp .7s ease}
 
-/* Score circle */
 .score-wrap{text-align:center;margin-bottom:32px;animation:fadeInUp .8s ease}
 .score-circle{position:relative;width:140px;height:140px;margin:0 auto 12px}
 .score-circle svg{transform:rotate(-90deg);width:140px;height:140px}
@@ -64,7 +68,6 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,Bl
 .score-label{color:var(--muted);font-size:.85rem;margin-top:4px}
 .score-expl{color:var(--muted);font-size:.9rem;max-width:400px;margin:8px auto 0}
 
-/* Roast lines */
 .roast-lines{margin-bottom:28px}
 .roast-line{background:#1a1030;border-left:3px solid var(--orange);border-radius:0 10px 10px 0;padding:16px 20px;margin-bottom:12px;font-size:1rem;line-height:1.5;opacity:0;transform:translateX(-20px);animation:slideIn .5s ease forwards}
 .roast-line:nth-child(1){animation-delay:.3s}
@@ -75,31 +78,33 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,Bl
 @keyframes slideIn{to{opacity:1;transform:translateX(0)}}
 @keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 
-/* Stats */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:28px}
 .stat-item{background:#1a1030;border-radius:12px;padding:16px;text-align:center}
 .stat-val{font-size:1.4rem;font-weight:700;color:var(--purple)}
 .stat-label{font-size:.75rem;color:var(--muted);margin-top:4px}
 
-/* Actions */
 .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
 .btn-secondary{background:var(--card);border:2px solid #2a1f42;color:var(--text);border-radius:12px;padding:12px 20px;font-size:.9rem;font-weight:600;cursor:pointer;transition:all .2s}
 .btn-secondary:hover{border-color:var(--purple);background:#1a1030}
 .btn-twitter{background:#1da1f2;border:none;color:#fff;border-radius:12px;padding:12px 20px;font-size:.9rem;font-weight:600;cursor:pointer;transition:transform .15s}
 .btn-twitter:hover{transform:translateY(-2px)}
+.btn-copy{position:relative}
+.btn-copy .copied{position:absolute;top:-30px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:4px 12px;border-radius:8px;font-size:.75rem;opacity:0;transition:opacity .3s}
+.btn-copy .copied.show{opacity:1}
 
-/* Recent */
 .recent{padding:40px 0}
 .recent h3{color:var(--muted);font-size:.85rem;text-transform:uppercase;letter-spacing:2px;margin-bottom:16px;text-align:center}
 .recent-item{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--card);border-radius:10px;margin-bottom:8px}
 .recent-title{font-weight:600;font-size:.9rem}
 .recent-score{color:var(--orange);font-weight:700;font-size:.9rem}
 
-/* Error */
-.error{background:#2d1020;border:1px solid var(--red);border-radius:12px;padding:16px;text-align:center;color:var(--red);margin:20px 0;display:none}
+.error{background:#2d1020;border:1px solid var(--red);border-radius:12px;padding:20px;text-align:center;color:var(--red);margin:20px 0;display:none;font-size:1.05rem}
 .error.active{display:block}
 
-/* Mobile */
+.footer{text-align:center;padding:40px 0 20px;color:var(--muted);font-size:.8rem}
+.footer a{color:var(--purple);text-decoration:none}
+.footer a:hover{text-decoration:underline}
+
 @media(max-width:600px){
   .hero h1{font-size:2.2rem}
   .input-wrap{flex-direction:column}
@@ -110,7 +115,6 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,Bl
 </head>
 <body>
 <div class="container">
-  <!-- HERO -->
   <div class="hero" id="hero">
     <h1>🔥 Get Roasted</h1>
     <p>How degen is your Solana wallet?</p>
@@ -118,23 +122,28 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,Bl
       <input type="text" id="walletInput" placeholder="Paste your Solana wallet address..." autocomplete="off" spellcheck="false">
       <button class="btn" id="roastBtn" onclick="doRoast()">Roast Me 🔥</button>
     </div>
+    <div class="examples">
+      Try a famous wallet:
+      <span onclick="tryWallet('toly.sol','CKs1E69a2e9TmH4mKKLrXFF8kD3ZnwKjoEuXa6sz9WqX')">Toly</span>
+      <span onclick="tryWallet('mert','madSoL3Fz7Jm5fFBxEDFmAEJCm588bun5KEiJrb7ivH')">Mert</span>
+      <span onclick="tryWallet('whale','5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9')">Whale 🐋</span>
+    </div>
   </div>
 
-  <!-- ERROR -->
   <div class="error" id="error"></div>
 
-  <!-- LOADING -->
   <div class="loading" id="loading">
-    <div class="spinner"></div>
+    <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
     <div class="loading-msg" id="loadingMsg"></div>
+    <div class="loading-pct" id="loadingPct">0%</div>
   </div>
 
-  <!-- RESULT -->
+  <div class="fire-particles" id="fireParticles"></div>
+
   <div class="result" id="result">
     <div class="result-card">
       <div class="result-title" id="resTitle"></div>
       <div class="result-summary" id="resSummary"></div>
-
       <div class="score-wrap">
         <div class="score-circle">
           <svg viewBox="0 0 140 140">
@@ -146,23 +155,26 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,Bl
         <div class="score-label">DEGEN SCORE</div>
         <div class="score-expl" id="scoreExpl"></div>
       </div>
-
       <div class="roast-lines" id="roastLines"></div>
-
       <div class="stats-grid" id="statsGrid"></div>
-
       <div class="actions">
-        <button class="btn-twitter" id="twitterBtn" onclick="shareTwitter()">Share on Twitter 𝕏</button>
-        <button class="btn-secondary" id="downloadBtn" onclick="downloadCard()">📥 Download Card</button>
+        <button class="btn-twitter" onclick="shareTwitter()">Share on 𝕏</button>
+        <button class="btn-secondary btn-copy" onclick="copyShareLink()">🔗 Copy Link <span class="copied" id="copiedMsg">Copied!</span></button>
+        <button class="btn-secondary" onclick="downloadCard()">📥 Download Card</button>
         <button class="btn-secondary" onclick="resetUI()">🔥 Roast Another</button>
       </div>
     </div>
   </div>
 
-  <!-- RECENT -->
   <div class="recent" id="recent">
     <h3>Recent Roasts</h3>
     <div id="recentList"></div>
+  </div>
+
+  <div class="footer">
+    Built by an AI agent 🤖 for <a href="https://superteam.fun" target="_blank">Superteam Open Innovation</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/0xksure/solana-roast-bot" target="_blank">GitHub</a>
   </div>
 </div>
 
@@ -175,20 +187,22 @@ const LOADING_MSGS = [
   "Consulting the blockchain oracle...",
   "Measuring your copium levels...",
   "Analyzing your rug pull history...",
-  "Computing your L/W ratio..."
+  "Computing your L/W ratio...",
+  "Checking if you've touched grass recently...",
+  "Rating your shitcoin collection..."
 ];
 
 let currentWallet = '';
 let currentRoast = null;
 let loadingInterval = null;
+let progressInterval = null;
 
-// Check URL params
+// URL handling
 const params = new URLSearchParams(window.location.search);
 if (params.get('wallet')) {
   document.getElementById('walletInput').value = params.get('wallet');
   setTimeout(() => doRoast(), 300);
 }
-// Check if path is a wallet
 const path = window.location.pathname.slice(1);
 if (path && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(path)) {
   document.getElementById('walletInput').value = path;
@@ -201,11 +215,16 @@ document.getElementById('walletInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') doRoast();
 });
 
+function tryWallet(name, addr) {
+  document.getElementById('walletInput').value = addr;
+  doRoast();
+}
+
 async function doRoast() {
   const input = document.getElementById('walletInput').value.trim();
   if (!input) return;
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(input)) {
-    showError('Invalid Solana wallet address');
+    showError('Invalid Solana wallet address — check and try again');
     return;
   }
   currentWallet = input;
@@ -223,8 +242,8 @@ async function doRoast() {
     }
     currentRoast = await res.json();
     showResult(currentRoast);
-    // Update URL
     window.history.replaceState({}, '', `/?wallet=${input}`);
+    launchFireParticles();
     loadRecent();
   } catch(e) {
     showError(e.message);
@@ -234,75 +253,111 @@ async function doRoast() {
 function showLoading() {
   hide('hero'); hide('result'); hide('error'); hide('recent');
   show('loading');
+  let progress = 0;
   let i = 0;
   document.getElementById('loadingMsg').textContent = LOADING_MSGS[0];
+  document.getElementById('progressBar').style.width = '0%';
+  document.getElementById('loadingPct').textContent = '0%';
+
   loadingInterval = setInterval(() => {
     i = (i + 1) % LOADING_MSGS.length;
     document.getElementById('loadingMsg').textContent = LOADING_MSGS[i];
   }, 2200);
+
+  // Fake progress: 0-30 fast, 30-70 medium, 70-95 slow
+  progressInterval = setInterval(() => {
+    if (progress < 30) progress += 3;
+    else if (progress < 70) progress += 1.5;
+    else if (progress < 95) progress += 0.3;
+    document.getElementById('progressBar').style.width = Math.min(progress, 95) + '%';
+    document.getElementById('loadingPct').textContent = Math.round(Math.min(progress, 95)) + '%';
+  }, 200);
+}
+
+function stopLoading() {
+  clearInterval(loadingInterval);
+  clearInterval(progressInterval);
+  document.getElementById('progressBar').style.width = '100%';
+  document.getElementById('loadingPct').textContent = '100%';
 }
 
 function showError(msg) {
-  clearInterval(loadingInterval);
+  stopLoading();
   hide('loading');
   show('hero'); show('recent');
   const el = document.getElementById('error');
-  el.textContent = msg;
+  el.textContent = '💀 ' + msg;
   el.classList.add('active');
-  setTimeout(() => el.classList.remove('active'), 5000);
+  setTimeout(() => el.classList.remove('active'), 6000);
 }
 
 function showResult(r) {
-  clearInterval(loadingInterval);
-  hide('loading'); hide('hero'); hide('error');
-  show('result');
+  stopLoading();
+  setTimeout(() => {
+    hide('loading'); hide('hero'); hide('error');
+    show('result');
 
-  document.getElementById('resTitle').textContent = `"${r.title}"`;
-  document.getElementById('resSummary').textContent = r.summary;
+    document.getElementById('resTitle').textContent = `"${r.title}"`;
+    document.getElementById('resSummary').textContent = r.summary;
 
-  // Score animation
-  const score = r.degen_score || 0;
-  const circumference = 2 * Math.PI * 65;
-  const offset = circumference - (score / 100) * circumference;
-  const fill = document.getElementById('scoreFill');
-  fill.style.strokeDasharray = circumference;
-  fill.style.strokeDashoffset = circumference;
-  // Color
-  if (score < 33) fill.style.stroke = '#22c55e';
-  else if (score < 66) fill.style.stroke = '#eab308';
-  else fill.style.stroke = '#ff4500';
-  setTimeout(() => { fill.style.strokeDashoffset = offset; }, 100);
-  // Animate number
-  animateNum('scoreNum', 0, score, 1500);
-  document.getElementById('scoreExpl').textContent = r.score_explanation || '';
+    const score = r.degen_score || 0;
+    const circumference = 2 * Math.PI * 65;
+    const offset = circumference - (score / 100) * circumference;
+    const fill = document.getElementById('scoreFill');
+    fill.style.strokeDasharray = circumference;
+    fill.style.strokeDashoffset = circumference;
+    if (score < 33) fill.style.stroke = '#22c55e';
+    else if (score < 66) fill.style.stroke = '#eab308';
+    else fill.style.stroke = '#ff4500';
+    setTimeout(() => { fill.style.strokeDashoffset = offset; }, 100);
+    animateNum('scoreNum', 0, score, 1500);
+    document.getElementById('scoreExpl').textContent = r.score_explanation || '';
 
-  // Roast lines
-  const linesEl = document.getElementById('roastLines');
-  linesEl.innerHTML = '';
-  (r.roast_lines || []).forEach(line => {
-    const div = document.createElement('div');
-    div.className = 'roast-line';
-    div.textContent = line;
-    linesEl.appendChild(div);
-  });
+    const linesEl = document.getElementById('roastLines');
+    linesEl.innerHTML = '';
+    (r.roast_lines || []).forEach(line => {
+      const div = document.createElement('div');
+      div.className = 'roast-line';
+      div.textContent = line;
+      linesEl.appendChild(div);
+    });
 
-  // Stats
-  const stats = r.wallet_stats || {};
-  const grid = document.getElementById('statsGrid');
-  grid.innerHTML = '';
-  const items = [
-    [stats.sol_balance ? `${stats.sol_balance} SOL` : '—', 'Balance'],
-    [stats.sol_usd ? `$${stats.sol_usd.toLocaleString()}` : '—', 'USD Value'],
-    [stats.token_count ?? '—', 'Tokens'],
-    [stats.transaction_count ?? '—', 'Transactions'],
-    [stats.failed_transactions ?? '—', 'Failed TXs'],
-    [stats.wallet_age_days ? `${stats.wallet_age_days}d` : '—', 'Wallet Age'],
-    [stats.swap_count ?? '—', 'Swaps'],
-    [stats.memecoin_count ?? '—', 'Memecoins'],
-  ];
-  items.forEach(([val, label]) => {
-    grid.innerHTML += `<div class="stat-item"><div class="stat-val">${val}</div><div class="stat-label">${label}</div></div>`;
-  });
+    const stats = r.wallet_stats || {};
+    const grid = document.getElementById('statsGrid');
+    grid.innerHTML = '';
+    const items = [
+      [stats.sol_balance ? `${stats.sol_balance} SOL` : '—', 'Balance'],
+      [stats.sol_usd ? `$${stats.sol_usd.toLocaleString()}` : '—', 'USD Value'],
+      [stats.token_count ?? '—', 'Tokens'],
+      [stats.transaction_count ?? '—', 'Transactions'],
+      [stats.failed_transactions ?? '—', 'Failed TXs'],
+      [stats.wallet_age_days ? `${stats.wallet_age_days}d` : '—', 'Wallet Age'],
+      [stats.swap_count ?? '—', 'Swaps'],
+      [stats.shitcoin_count ?? '—', 'Shitcoins'],
+    ];
+    items.forEach(([val, label]) => {
+      grid.innerHTML += `<div class="stat-item"><div class="stat-val">${val}</div><div class="stat-label">${label}</div></div>`;
+    });
+  }, 400);
+}
+
+function launchFireParticles() {
+  const container = document.getElementById('fireParticles');
+  container.innerHTML = '';
+  container.classList.add('active');
+  const colors = ['#ff7832', '#ff4500', '#f472b6', '#eab308', '#ff6347'];
+  for (let i = 0; i < 40; i++) {
+    const p = document.createElement('div');
+    p.className = 'fire-particle';
+    p.style.left = Math.random() * 100 + '%';
+    p.style.background = colors[Math.floor(Math.random() * colors.length)];
+    p.style.animationDuration = (1.5 + Math.random() * 2) + 's';
+    p.style.animationDelay = Math.random() * 0.8 + 's';
+    p.style.width = (8 + Math.random() * 10) + 'px';
+    p.style.height = p.style.width;
+    container.appendChild(p);
+  }
+  setTimeout(() => { container.classList.remove('active'); container.innerHTML = ''; }, 4000);
 }
 
 function animateNum(id, start, end, duration) {
@@ -322,6 +377,16 @@ function shareTwitter() {
   const text = `My Solana wallet got roasted 🔥\n\nI'm "${currentRoast.title}" with a ${currentRoast.degen_score}/100 degen score.\n\nThink you can handle it?`;
   const url = window.location.origin + '/' + currentWallet;
   window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+}
+
+function copyShareLink() {
+  if (!currentWallet) return;
+  const url = window.location.origin + '/' + currentWallet;
+  navigator.clipboard.writeText(url).then(() => {
+    const msg = document.getElementById('copiedMsg');
+    msg.classList.add('show');
+    setTimeout(() => msg.classList.remove('show'), 2000);
+  });
 }
 
 function downloadCard() {
@@ -345,11 +410,12 @@ async function loadRecent() {
     list.innerHTML = '';
     if (!data.length) { list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">No roasts yet. Be the first! 🔥</div>'; return; }
     data.forEach(r => {
-      list.innerHTML += `<div class="recent-item"><span class="recent-title">"${r.title}"</span><span class="recent-score">${r.degen_score}/100</span></div>`;
+      list.innerHTML += `<div class="recent-item"><span class="recent-title">"${esc(r.title)}"</span><span class="recent-score">${r.degen_score}/100</span></div>`;
     });
   } catch(e) {}
 }
 
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function show(id) { document.getElementById(id).style.display = ''; document.getElementById(id).classList?.add('active'); }
 function hide(id) { const el = document.getElementById(id); el.style.display = 'none'; el.classList?.remove('active'); }
 </script>
