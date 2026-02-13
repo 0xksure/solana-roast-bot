@@ -259,8 +259,10 @@ async def robots():
     return Response(content="User-agent: *\nAllow: /\n", media_type="text/plain")
 
 
-# Mount static files
+# Mount static files (serves built React app assets + images)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
+app.mount("/img", StaticFiles(directory=str(STATIC_DIR / "img")), name="img")
 
 
 @app.get("/")
@@ -270,7 +272,7 @@ async def index():
 
 @app.get("/{wallet}")
 async def wallet_page(wallet: str, request: Request):
-    if wallet in ("favicon.ico", "robots.txt") or wallet.startswith("api/") or wallet.startswith("static/"):
+    if wallet in ("favicon.ico", "robots.txt") or wallet.startswith("api/") or wallet.startswith("static/") or wallet.startswith("assets/") or wallet.startswith("img/"):
         raise HTTPException(status_code=404)
     try:
         wallet = _validate_wallet(wallet)
