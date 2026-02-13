@@ -72,7 +72,7 @@ export default function App() {
         )}
 
         {!loading && <Leaderboard visible={!roast} onRoast={doRoast} />}
-        {!loading && <RecentRoasts visible={!roast} />}
+        {!loading && <RecentRoasts visible={!roast} onRoast={doRoast} />}
         <Footer />
       </div>
     </>

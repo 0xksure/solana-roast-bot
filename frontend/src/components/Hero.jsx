@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import WalletButton from './WalletButton';
 
 const EXAMPLES = [
@@ -9,6 +9,11 @@ const EXAMPLES = [
 
 export default function Hero({ onRoast, error }) {
   const [input, setInput] = useState('');
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    fetch('/api/stats').then(r => r.json()).then(setStats).catch(() => {});
+  }, []);
 
   const handleSubmit = () => {
     if (input.trim()) onRoast(input.trim());
@@ -45,6 +50,13 @@ export default function Hero({ onRoast, error }) {
           </span>
         ))}
       </div>
+      {stats && stats.total_roasts > 0 && (
+        <div className="hero-stats">
+          <span>🔥 <strong>{stats.total_roasts.toLocaleString()}</strong> wallets roasted</span>
+          <span>·</span>
+          <span>📊 Avg degen score: <strong>{stats.avg_degen_score}</strong>/100</span>
+        </div>
+      )}
     </div>
   );
 }
