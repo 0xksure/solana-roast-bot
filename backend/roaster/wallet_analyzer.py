@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
@@ -27,6 +28,29 @@ KNOWN_PROGRAMS = {
     "11111111111111111111111111111111": "System",
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA": "Token Program",
     "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL": "ATA Program",
+}
+
+SWAP_PROGRAMS = {
+    "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+}
+
+MARKET_EVENTS = {
+    "2021-09": {"event": "Solana ATH run to $260", "sentiment": "peak euphoria"},
+    "2021-11": {"event": "Solana hits $260 ATH", "sentiment": "top signal"},
+    "2022-01": {"event": "Crypto winter begins", "sentiment": "denial"},
+    "2022-05": {"event": "LUNA/UST collapse", "sentiment": "panic"},
+    "2022-06": {"event": "3AC & Celsius collapse", "sentiment": "capitulation"},
+    "2022-11": {"event": "FTX collapse, SOL drops to $8", "sentiment": "extinction level"},
+    "2023-01": {"event": "SOL bottoms around $8-10", "sentiment": "max pain"},
+    "2023-10": {"event": "SOL recovery begins, hits $30+", "sentiment": "cautious optimism"},
+    "2023-12": {"event": "Solana DeFi renaissance, Jito airdrop", "sentiment": "FOMO returns"},
+    "2024-01": {"event": "Jupiter airdrop, memecoin season begins", "sentiment": "full degen"},
+    "2024-03": {"event": "SOL hits $200, BONK/WIF mania", "sentiment": "peak degen"},
+    "2024-11": {"event": "Trump pump, SOL hits $260+", "sentiment": "new ATH euphoria"},
+    "2025-01": {"event": "TRUMP memecoin launch", "sentiment": "peak memecoin mania"},
+    "2025-06": {"event": "Market cooldown", "sentiment": "reality check"},
 }
 
 
@@ -73,7 +97,6 @@ async def _get_sol_balance(client: httpx.AsyncClient, wallet: str) -> float:
 
 async def _get_sol_price(client: httpx.AsyncClient) -> float:
     """Get SOL price with fallback chain."""
-    # CoinGecko (reliable, no auth needed)
     try:
         r = await client.get(
             "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
@@ -86,7 +109,6 @@ async def _get_sol_price(client: httpx.AsyncClient) -> float:
     except Exception:
         pass
 
-    # Jupiter v2 (may need auth now)
     try:
         r = await client.get(f"https://api.jup.ag/price/v2?ids={SOL_MINT}", timeout=10)
         data = r.json()
@@ -113,19 +135,27 @@ async def _get_token_accounts(client: httpx.AsyncClient, wallet: str) -> list:
     return (result or {}).get("value", [])
 
 
-async def _get_recent_transactions(client: httpx.AsyncClient, signatures: list, limit: int = 10) -> list:
-    """Fetch details of recent transactions to analyze programs used."""
+async def _get_transaction_parsed(client: httpx.AsyncClient, signature: str) -> dict | None:
+    """Fetch a single parsed transaction with timeout."""
+    try:
+        result = await _rpc(client, "getTransaction", [
+            signature,
+            {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}
+        ])
+        return result
+    except Exception:
+        return None
+
+
+async def _get_recent_transactions(client: httpx.AsyncClient, signatures: list, limit: int = 20) -> list:
+    """Fetch details of recent transactions with rate limiting. Max 20 calls."""
     txns = []
-    for sig in signatures[:limit]:
-        try:
-            result = await _rpc(client, "getTransaction", [
-                sig["signature"],
-                {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}
-            ])
-            if result:
-                txns.append(result)
-        except Exception:
-            continue
+    fetch_limit = min(limit, 20)
+    for sig in signatures[:fetch_limit]:
+        tx = await _get_transaction_parsed(client, sig["signature"])
+        if tx:
+            txns.append(tx)
+        await asyncio.sleep(0.1)  # Rate limiting: 100ms between calls
     return txns
 
 
@@ -137,22 +167,18 @@ def _analyze_signatures(sigs: list) -> dict:
     failed = sum(1 for s in sigs if s.get("err") is not None)
     timestamps = [s["blockTime"] for s in sigs if s.get("blockTime")]
 
-    # Time-of-day analysis
     hour_dist: dict[int, int] = {}
     for ts in timestamps:
         hour = datetime.fromtimestamp(ts, tz=timezone.utc).hour
         hour_dist[hour] = hour_dist.get(hour, 0) + 1
 
-    # Late night count (0-5 AM UTC)
     late_night_txs = sum(hour_dist.get(h, 0) for h in range(0, 6))
 
-    # Txs per day
     txs_per_day = 0
     if timestamps and len(timestamps) > 1:
         span_days = max((max(timestamps) - min(timestamps)) / 86400, 1)
         txs_per_day = round(len(timestamps) / span_days, 1)
 
-    # Burst detection (5+ txs within 5 minutes)
     burst_count = 0
     sorted_ts = sorted(timestamps)
     for i in range(len(sorted_ts) - 4):
@@ -197,6 +223,317 @@ def _analyze_tokens(accounts: list, token_list: dict) -> list:
     return sorted(tokens, key=lambda t: t["amount"], reverse=True)
 
 
+def _extract_swaps_from_tx(tx: dict, wallet: str, token_list: dict) -> list[dict]:
+    """Extract swap info from a parsed transaction.
+
+    Returns list of swap dicts with token_in, token_out, sol_amount, timestamp, etc.
+    """
+    swaps = []
+    msg = tx.get("transaction", {}).get("message", {})
+    meta = tx.get("meta", {})
+    block_time = tx.get("blockTime")
+    instructions = msg.get("instructions", [])
+
+    # Check if this tx involves a swap program
+    is_swap = False
+    for ix in instructions:
+        if ix.get("programId", "") in SWAP_PROGRAMS:
+            is_swap = True
+            break
+    if not is_swap:
+        # Also check inner instructions
+        for inner in (meta.get("innerInstructions") or []):
+            for ix in inner.get("instructions", []):
+                if ix.get("programId", "") in SWAP_PROGRAMS:
+                    is_swap = True
+                    break
+            if is_swap:
+                break
+
+    if not is_swap:
+        return []
+
+    # Analyze token balance changes (pre/post balances)
+    pre_balances = meta.get("preTokenBalances") or []
+    post_balances = meta.get("postTokenBalances") or []
+
+    # Build balance diff by mint
+    pre_map: dict[str, float] = {}
+    post_map: dict[str, float] = {}
+
+    for b in pre_balances:
+        owner = b.get("owner", "")
+        if owner == wallet:
+            mint = b.get("mint", "")
+            amt = float((b.get("uiTokenAmount") or {}).get("uiAmount") or 0)
+            pre_map[mint] = pre_map.get(mint, 0) + amt
+
+    for b in post_balances:
+        owner = b.get("owner", "")
+        if owner == wallet:
+            mint = b.get("mint", "")
+            amt = float((b.get("uiTokenAmount") or {}).get("uiAmount") or 0)
+            post_map[mint] = post_map.get(mint, 0) + amt
+
+    # Also check SOL balance change
+    account_keys = msg.get("accountKeys", [])
+    wallet_idx = None
+    for i, key in enumerate(account_keys):
+        k = key if isinstance(key, str) else key.get("pubkey", "")
+        if k == wallet:
+            wallet_idx = i
+            break
+
+    sol_change = 0.0
+    if wallet_idx is not None:
+        pre_sol = (meta.get("preBalances") or [0] * (wallet_idx + 1))[wallet_idx] / 1e9
+        post_sol = (meta.get("postBalances") or [0] * (wallet_idx + 1))[wallet_idx] / 1e9
+        sol_change = post_sol - pre_sol
+
+    # Determine what went in and what came out
+    all_mints = set(list(pre_map.keys()) + list(post_map.keys()))
+    token_in = None  # token spent
+    token_out = None  # token received
+
+    for mint in all_mints:
+        diff = post_map.get(mint, 0) - pre_map.get(mint, 0)
+        tinfo = token_list.get(mint, {})
+        symbol = tinfo.get("symbol", mint[:8] + "...")
+
+        if diff < -0.0001:  # spent
+            token_in = {"mint": mint, "symbol": symbol, "amount": abs(diff)}
+        elif diff > 0.0001:  # received
+            token_out = {"mint": mint, "symbol": symbol, "amount": diff}
+
+    # If SOL changed significantly and no token_in/out covers SOL
+    if sol_change < -0.01 and not token_in:
+        token_in = {"mint": SOL_MINT, "symbol": "SOL", "amount": abs(sol_change)}
+    elif sol_change > 0.01 and not token_out:
+        token_out = {"mint": SOL_MINT, "symbol": "SOL", "amount": sol_change}
+
+    if token_in or token_out:
+        swap = {
+            "timestamp": block_time,
+            "token_in": token_in,
+            "token_out": token_out,
+            "sol_change": round(sol_change, 6),
+        }
+        swaps.append(swap)
+
+    return swaps
+
+
+def _analyze_swaps(swaps: list) -> dict:
+    """Analyze swap history for PnL, biggest wins/losses, win rate."""
+    if not swaps:
+        return {
+            "total_swaps_detected": 0,
+            "estimated_pnl_sol": 0,
+            "biggest_loss": None,
+            "biggest_win": None,
+            "win_rate": 0,
+            "total_sol_volume": 0,
+        }
+
+    total_sol_spent = 0.0  # SOL spent buying tokens
+    total_sol_received = 0.0  # SOL received selling tokens
+    total_sol_volume = 0.0
+    wins = 0
+    losses = 0
+
+    biggest_loss = None
+    biggest_loss_sol = 0
+    biggest_win = None
+    biggest_win_sol = 0
+
+    for swap in swaps:
+        sol_change = swap.get("sol_change", 0)
+        total_sol_volume += abs(sol_change)
+
+        token_in = swap.get("token_in")
+        token_out = swap.get("token_out")
+
+        # Buying token with SOL (SOL goes down)
+        if token_in and token_in.get("symbol") == "SOL" and token_out:
+            sol_spent = token_in.get("amount", 0)
+            total_sol_spent += sol_spent
+            # This is a buy — track it as potential loss
+            if sol_spent > biggest_loss_sol:
+                biggest_loss_sol = sol_spent
+                biggest_loss = {
+                    "token": token_out.get("symbol", "???"),
+                    "sol_spent": round(sol_spent, 4),
+                    "amount_received": round(token_out.get("amount", 0), 4),
+                }
+
+        # Selling token for SOL (SOL goes up)
+        elif token_out and token_out.get("symbol") == "SOL" and token_in:
+            sol_received = token_out.get("amount", 0)
+            total_sol_received += sol_received
+            wins += 1
+            if sol_received > biggest_win_sol:
+                biggest_win_sol = sol_received
+                biggest_win = {
+                    "token": token_in.get("symbol", "???"),
+                    "sol_received": round(sol_received, 4),
+                    "amount_sold": round(token_in.get("amount", 0), 4),
+                }
+        else:
+            # Token-to-token swap, count as neutral
+            if sol_change < -0.01:
+                losses += 1
+            elif sol_change > 0.01:
+                wins += 1
+
+    total_trades = wins + losses
+    win_rate = round(wins / total_trades, 2) if total_trades > 0 else 0
+    estimated_pnl = round(total_sol_received - total_sol_spent, 4)
+
+    # Enrich biggest loss with loss percentage estimate
+    if biggest_loss:
+        biggest_loss["loss_pct"] = 99.9  # Assume worst — we can't check current value easily
+        biggest_loss["current_value_sol"] = 0.0  # Conservative estimate
+
+    if biggest_win:
+        biggest_win["gain_pct"] = round((biggest_win_sol / max(0.001, biggest_loss_sol)) * 100, 1) if biggest_loss_sol > 0 else 0
+
+    return {
+        "total_swaps_detected": len(swaps),
+        "estimated_pnl_sol": estimated_pnl,
+        "biggest_loss": biggest_loss,
+        "biggest_win": biggest_win,
+        "win_rate": win_rate,
+        "total_sol_volume": round(total_sol_volume, 4),
+    }
+
+
+def _analyze_timeline(sigs: list) -> dict:
+    """Map wallet activity to market events timeline."""
+    if not sigs:
+        return {
+            "active_periods": [],
+            "peak_activity_period": None,
+            "inactive_gaps": [],
+            "joined_during": None,
+        }
+
+    timestamps = sorted([s["blockTime"] for s in sigs if s.get("blockTime")])
+    if not timestamps:
+        return {
+            "active_periods": [],
+            "peak_activity_period": None,
+            "inactive_gaps": [],
+            "joined_during": None,
+        }
+
+    # Group transactions by month (YYYY-MM)
+    monthly_counts: dict[str, int] = defaultdict(int)
+    for ts in timestamps:
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+        key = dt.strftime("%Y-%m")
+        monthly_counts[key] += 1
+
+    # Build active periods with market event mapping
+    active_periods = []
+    for period, count in sorted(monthly_counts.items()):
+        entry: dict[str, Any] = {"period": period, "tx_count": count}
+        if period in MARKET_EVENTS:
+            entry["event"] = MARKET_EVENTS[period]["event"]
+            entry["sentiment"] = MARKET_EVENTS[period]["sentiment"]
+        active_periods.append(entry)
+
+    # Peak activity period
+    peak = max(active_periods, key=lambda x: x["tx_count"]) if active_periods else None
+
+    # Joined during
+    first_ts = timestamps[0]
+    first_dt = datetime.fromtimestamp(first_ts, tz=timezone.utc)
+    first_period = first_dt.strftime("%Y-%m")
+    joined = {"period": first_period, "date": first_dt.isoformat()}
+    if first_period in MARKET_EVENTS:
+        joined["event"] = MARKET_EVENTS[first_period]["event"]
+        joined["sentiment"] = MARKET_EVENTS[first_period]["sentiment"]
+        # Generate roast based on when they joined
+        sentiment = MARKET_EVENTS[first_period]["sentiment"]
+        if sentiment in ("top signal", "peak euphoria", "peak degen", "peak memecoin mania"):
+            joined["roast"] = "Bought the absolute top"
+        elif sentiment in ("extinction level", "capitulation", "panic"):
+            joined["roast"] = "Started during the apocalypse — brave or stupid"
+        elif sentiment == "max pain":
+            joined["roast"] = "Born in the darkness of max pain"
+        elif sentiment in ("full degen", "FOMO returns"):
+            joined["roast"] = "Classic FOMO entry"
+        else:
+            joined["roast"] = f"Joined during {MARKET_EVENTS[first_period]['event']}"
+    else:
+        # Find closest market event
+        joined["roast"] = f"Joined in {first_period}"
+
+    # Detect inactive gaps (months with 0 activity)
+    if len(timestamps) >= 2:
+        all_months = sorted(monthly_counts.keys())
+        inactive_gaps = []
+        for i in range(len(all_months) - 1):
+            current = all_months[i]
+            next_m = all_months[i + 1]
+            # Parse months
+            cy, cm = int(current[:4]), int(current[5:7])
+            ny, nm = int(next_m[:4]), int(next_m[5:7])
+            gap_months = (ny - cy) * 12 + (nm - cm) - 1
+            if gap_months >= 2:
+                # What events were missed during the gap?
+                missed_events = []
+                for event_period, event_data in MARKET_EVENTS.items():
+                    ey, em = int(event_period[:4]), int(event_period[5:7])
+                    event_total = ey * 12 + em
+                    start_total = cy * 12 + cm
+                    end_total = ny * 12 + nm
+                    if start_total < event_total < end_total:
+                        missed_events.append(event_data["event"])
+                gap_entry: dict[str, Any] = {
+                    "from": current,
+                    "to": next_m,
+                    "months": gap_months,
+                }
+                if missed_events:
+                    gap_entry["events_missed"] = missed_events
+                    gap_entry["event_missed"] = missed_events[0]
+                inactive_gaps.append(gap_entry)
+    else:
+        inactive_gaps = []
+
+    return {
+        "active_periods": active_periods,
+        "peak_activity_period": peak,
+        "inactive_gaps": inactive_gaps,
+        "joined_during": joined,
+    }
+
+
+def _analyze_graveyard(accounts: list, token_list: dict) -> dict:
+    """Identify 'graveyard' tokens — held tokens with near-zero value or unknown."""
+    graveyard_names = []
+    for acc in accounts:
+        info = acc.get("account", {}).get("data", {}).get("parsed", {}).get("info", {})
+        token_amount = info.get("tokenAmount", {})
+        amount = float(token_amount.get("uiAmount") or 0)
+        mint = info.get("mint", "")
+        token_info = token_list.get(mint)
+
+        # Graveyard criteria: unknown token OR known token with dust amount
+        if amount > 0:
+            if not token_info:
+                # Unknown token = likely dead/rugged
+                graveyard_names.append(mint[:8] + "...")
+            elif amount < 0.01 and token_info.get("symbol", "") not in ("SOL", "USDC", "USDT"):
+                graveyard_names.append(token_info.get("symbol", mint[:8]))
+
+    return {
+        "graveyard_tokens": len(graveyard_names),
+        "graveyard_names": graveyard_names[:20],  # Cap at 20 for display
+    }
+
+
 def _analyze_recent_txns(txns: list) -> dict:
     """Analyze recent transactions for programs used."""
     programs_used: dict[str, int] = {}
@@ -216,7 +553,6 @@ def _analyze_recent_txns(txns: list) -> dict:
             if name in ("Tensor", "Magic Eden"):
                 nft_count += 1
 
-        # Also check inner instructions
         meta = tx.get("meta", {})
         for inner in (meta.get("innerInstructions") or []):
             for ix in inner.get("instructions", []):
@@ -256,14 +592,36 @@ async def analyze_wallet(wallet: str) -> dict:
         sig_analysis = _analyze_signatures(signatures)
         token_list_parsed = _analyze_tokens(token_accounts, token_list)
 
-        # Fetch recent transactions for program analysis
+        # Fetch recent transactions for program analysis + swap parsing (max 20, rate limited)
         txn_analysis = {"programs_used": {}, "swap_count": 0, "nft_activity": 0}
+        swap_analysis = {
+            "total_swaps_detected": 0, "estimated_pnl_sol": 0,
+            "biggest_loss": None, "biggest_win": None,
+            "win_rate": 0, "total_sol_volume": 0,
+        }
+        recent_txns = []
         if signatures:
             try:
-                recent_txns = await _get_recent_transactions(client, signatures, limit=10)
+                recent_txns = await _get_recent_transactions(client, signatures, limit=20)
                 txn_analysis = _analyze_recent_txns(recent_txns)
             except Exception:
                 pass
+
+            # Extract swaps from parsed transactions
+            try:
+                all_swaps = []
+                for tx in recent_txns:
+                    swaps = _extract_swaps_from_tx(tx, wallet, token_list)
+                    all_swaps.extend(swaps)
+                swap_analysis = _analyze_swaps(all_swaps)
+            except Exception:
+                pass
+
+        # Timeline analysis (uses all signatures for broad coverage)
+        timeline = _analyze_timeline(signatures)
+
+        # Token graveyard
+        graveyard = _analyze_graveyard(token_accounts, token_list)
 
         # Wallet age
         wallet_age_days = None
@@ -299,4 +657,19 @@ async def analyze_wallet(wallet: str) -> dict:
             "protocols_used": list(txn_analysis.get("programs_used", {}).keys()),
             "nft_activity": txn_analysis.get("nft_activity", 0),
             "is_empty": sol_balance == 0 and len(token_list_parsed) == 0 and sig_analysis["total"] == 0,
+            # PnL & Trading
+            "estimated_pnl_sol": swap_analysis.get("estimated_pnl_sol", 0),
+            "biggest_loss": swap_analysis.get("biggest_loss"),
+            "biggest_win": swap_analysis.get("biggest_win"),
+            "total_swaps_detected": swap_analysis.get("total_swaps_detected", 0),
+            "win_rate": swap_analysis.get("win_rate", 0),
+            "total_sol_volume": swap_analysis.get("total_sol_volume", 0),
+            # Timeline
+            "active_periods": timeline.get("active_periods", []),
+            "peak_activity_period": timeline.get("peak_activity_period"),
+            "inactive_gaps": timeline.get("inactive_gaps", []),
+            "joined_during": timeline.get("joined_during"),
+            # Token Graveyard
+            "graveyard_tokens": graveyard.get("graveyard_tokens", 0),
+            "graveyard_names": graveyard.get("graveyard_names", []),
         }
