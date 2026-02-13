@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solana Roast Bot 🔥</title>
+<meta property="og:title" content="Solana Roast Bot 🔥">
+<meta property="og:description" content="How degen is your Solana wallet? Get roasted.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0515;--card:#130d24;--purple:#8b5cf6;--orange:#ff7832;--pink:#f472b6;--text:#e2ddf5;--muted:#7c7394;--green:#22c55e;--red:#ef4444;--yellow:#eab308}
+body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;overflow-x:hidden}
+@font-face{font-family:'Inter';src:url('/static/fonts/Inter-Regular.ttf') format('truetype');font-weight:400}
+@font-face{font-family:'Inter';src:url('/static/fonts/Inter-Bold.ttf') format('truetype');font-weight:700}
+
+.container{max-width:700px;margin:0 auto;padding:20px 16px}
+
+/* Hero */
+.hero{text-align:center;padding:60px 0 40px}
+.hero h1{font-size:3rem;font-weight:700;margin-bottom:12px;background:linear-gradient(135deg,var(--orange),var(--pink),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{color:var(--muted);font-size:1.1rem;margin-bottom:32px}
+
+/* Input */
+.input-wrap{display:flex;gap:10px;max-width:560px;margin:0 auto}
+.input-wrap input{flex:1;background:var(--card);border:2px solid #2a1f42;border-radius:12px;padding:16px 20px;color:var(--text);font-size:1rem;outline:none;transition:border-color .2s}
+.input-wrap input:focus{border-color:var(--purple)}
+.input-wrap input::placeholder{color:var(--muted)}
+
+.btn{background:linear-gradient(135deg,var(--orange),#ff4500);color:#fff;border:none;border-radius:12px;padding:16px 28px;font-size:1rem;font-weight:700;cursor:pointer;position:relative;overflow:hidden;transition:transform .15s,box-shadow .15s;white-space:nowrap}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(255,120,50,.35)}
+.btn:active{transform:translateY(0)}
+.btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
+
+/* Fire particles on button */
+.btn::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(255,120,50,.2) 0%,transparent 70%);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
+
+/* Loading */
+.loading{text-align:center;padding:60px 0;display:none}
+.loading.active{display:block}
+.spinner{width:60px;height:60px;border:4px solid #2a1f42;border-top-color:var(--orange);border-radius:50%;margin:0 auto 24px;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-msg{color:var(--orange);font-size:1.2rem;font-weight:700;min-height:30px}
+
+/* Result */
+.result{display:none;padding:20px 0}
+.result.active{display:block}
+
+.result-card{background:var(--card);border-radius:20px;padding:32px 28px;border:1px solid #2a1f42;margin-bottom:20px}
+
+.result-title{font-size:2rem;font-weight:700;text-align:center;margin-bottom:8px;color:var(--orange);animation:fadeInUp .6s ease}
+.result-summary{text-align:center;color:var(--muted);margin-bottom:28px;animation:fadeInUp .7s ease}
+
+/* Score circle */
+.score-wrap{text-align:center;margin-bottom:32px;animation:fadeInUp .8s ease}
+.score-circle{position:relative;width:140px;height:140px;margin:0 auto 12px}
+.score-circle svg{transform:rotate(-90deg);width:140px;height:140px}
+.score-circle circle{fill:none;stroke-width:10}
+.score-bg{stroke:#2a1f42}
+.score-fill{stroke:var(--orange);stroke-linecap:round;stroke-dasharray:408;stroke-dashoffset:408;transition:stroke-dashoffset 1.5s ease}
+.score-num{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:2.5rem;font-weight:700}
+.score-label{color:var(--muted);font-size:.85rem;margin-top:4px}
+.score-expl{color:var(--muted);font-size:.9rem;max-width:400px;margin:8px auto 0}
+
+/* Roast lines */
+.roast-lines{margin-bottom:28px}
+.roast-line{background:#1a1030;border-left:3px solid var(--orange);border-radius:0 10px 10px 0;padding:16px 20px;margin-bottom:12px;font-size:1rem;line-height:1.5;opacity:0;transform:translateX(-20px);animation:slideIn .5s ease forwards}
+.roast-line:nth-child(1){animation-delay:.3s}
+.roast-line:nth-child(2){animation-delay:.6s}
+.roast-line:nth-child(3){animation-delay:.9s}
+.roast-line:nth-child(4){animation-delay:1.2s}
+.roast-line:nth-child(5){animation-delay:1.5s}
+@keyframes slideIn{to{opacity:1;transform:translateX(0)}}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:28px}
+.stat-item{background:#1a1030;border-radius:12px;padding:16px;text-align:center}
+.stat-val{font-size:1.4rem;font-weight:700;color:var(--purple)}
+.stat-label{font-size:.75rem;color:var(--muted);margin-top:4px}
+
+/* Actions */
+.actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.btn-secondary{background:var(--card);border:2px solid #2a1f42;color:var(--text);border-radius:12px;padding:12px 20px;font-size:.9rem;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-secondary:hover{border-color:var(--purple);background:#1a1030}
+.btn-twitter{background:#1da1f2;border:none;color:#fff;border-radius:12px;padding:12px 20px;font-size:.9rem;font-weight:600;cursor:pointer;transition:transform .15s}
+.btn-twitter:hover{transform:translateY(-2px)}
+
+/* Recent */
+.recent{padding:40px 0}
+.recent h3{color:var(--muted);font-size:.85rem;text-transform:uppercase;letter-spacing:2px;margin-bottom:16px;text-align:center}
+.recent-item{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--card);border-radius:10px;margin-bottom:8px}
+.recent-title{font-weight:600;font-size:.9rem}
+.recent-score{color:var(--orange);font-weight:700;font-size:.9rem}
+
+/* Error */
+.error{background:#2d1020;border:1px solid var(--red);border-radius:12px;padding:16px;text-align:center;color:var(--red);margin:20px 0;display:none}
+.error.active{display:block}
+
+/* Mobile */
+@media(max-width:600px){
+  .hero h1{font-size:2.2rem}
+  .input-wrap{flex-direction:column}
+  .btn{width:100%}
+  .result-title{font-size:1.5rem}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- HERO -->
+  <div class="hero" id="hero">
+    <h1>🔥 Get Roasted</h1>
+    <p>How degen is your Solana wallet?</p>
+    <div class="input-wrap">
+      <input type="text" id="walletInput" placeholder="Paste your Solana wallet address..." autocomplete="off" spellcheck="false">
+      <button class="btn" id="roastBtn" onclick="doRoast()">Roast Me 🔥</button>
+    </div>
+  </div>
+
+  <!-- ERROR -->
+  <div class="error" id="error"></div>
+
+  <!-- LOADING -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div class="loading-msg" id="loadingMsg"></div>
+  </div>
+
+  <!-- RESULT -->
+  <div class="result" id="result">
+    <div class="result-card">
+      <div class="result-title" id="resTitle"></div>
+      <div class="result-summary" id="resSummary"></div>
+
+      <div class="score-wrap">
+        <div class="score-circle">
+          <svg viewBox="0 0 140 140">
+            <circle class="score-bg" cx="70" cy="70" r="65"/>
+            <circle class="score-fill" id="scoreFill" cx="70" cy="70" r="65"/>
+          </svg>
+          <div class="score-num" id="scoreNum">0</div>
+        </div>
+        <div class="score-label">DEGEN SCORE</div>
+        <div class="score-expl" id="scoreExpl"></div>
+      </div>
+
+      <div class="roast-lines" id="roastLines"></div>
+
+      <div class="stats-grid" id="statsGrid"></div>
+
+      <div class="actions">
+        <button class="btn-twitter" id="twitterBtn" onclick="shareTwitter()">Share on Twitter 𝕏</button>
+        <button class="btn-secondary" id="downloadBtn" onclick="downloadCard()">📥 Download Card</button>
+        <button class="btn-secondary" onclick="resetUI()">🔥 Roast Another</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECENT -->
+  <div class="recent" id="recent">
+    <h3>Recent Roasts</h3>
+    <div id="recentList"></div>
+  </div>
+</div>
+
+<script>
+const LOADING_MSGS = [
+  "Scanning your bad decisions...",
+  "Counting your failed txns...",
+  "Calculating your paper hands score...",
+  "Reading your portfolio... yikes...",
+  "Consulting the blockchain oracle...",
+  "Measuring your copium levels...",
+  "Analyzing your rug pull history...",
+  "Computing your L/W ratio..."
+];
+
+let currentWallet = '';
+let currentRoast = null;
+let loadingInterval = null;
+
+// Check URL params
+const params = new URLSearchParams(window.location.search);
+if (params.get('wallet')) {
+  document.getElementById('walletInput').value = params.get('wallet');
+  setTimeout(() => doRoast(), 300);
+}
+// Check if path is a wallet
+const path = window.location.pathname.slice(1);
+if (path && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(path)) {
+  document.getElementById('walletInput').value = path;
+  setTimeout(() => doRoast(), 300);
+}
+
+loadRecent();
+
+document.getElementById('walletInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doRoast();
+});
+
+async function doRoast() {
+  const input = document.getElementById('walletInput').value.trim();
+  if (!input) return;
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(input)) {
+    showError('Invalid Solana wallet address');
+    return;
+  }
+  currentWallet = input;
+  showLoading();
+
+  try {
+    const res = await fetch('/api/roast', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({wallet: input})
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || `Error ${res.status}`);
+    }
+    currentRoast = await res.json();
+    showResult(currentRoast);
+    // Update URL
+    window.history.replaceState({}, '', `/?wallet=${input}`);
+    loadRecent();
+  } catch(e) {
+    showError(e.message);
+  }
+}
+
+function showLoading() {
+  hide('hero'); hide('result'); hide('error'); hide('recent');
+  show('loading');
+  let i = 0;
+  document.getElementById('loadingMsg').textContent = LOADING_MSGS[0];
+  loadingInterval = setInterval(() => {
+    i = (i + 1) % LOADING_MSGS.length;
+    document.getElementById('loadingMsg').textContent = LOADING_MSGS[i];
+  }, 2200);
+}
+
+function showError(msg) {
+  clearInterval(loadingInterval);
+  hide('loading');
+  show('hero'); show('recent');
+  const el = document.getElementById('error');
+  el.textContent = msg;
+  el.classList.add('active');
+  setTimeout(() => el.classList.remove('active'), 5000);
+}
+
+function showResult(r) {
+  clearInterval(loadingInterval);
+  hide('loading'); hide('hero'); hide('error');
+  show('result');
+
+  document.getElementById('resTitle').textContent = `"${r.title}"`;
+  document.getElementById('resSummary').textContent = r.summary;
+
+  // Score animation
+  const score = r.degen_score || 0;
+  const circumference = 2 * Math.PI * 65;
+  const offset = circumference - (score / 100) * circumference;
+  const fill = document.getElementById('scoreFill');
+  fill.style.strokeDasharray = circumference;
+  fill.style.strokeDashoffset = circumference;
+  // Color
+  if (score < 33) fill.style.stroke = '#22c55e';
+  else if (score < 66) fill.style.stroke = '#eab308';
+  else fill.style.stroke = '#ff4500';
+  setTimeout(() => { fill.style.strokeDashoffset = offset; }, 100);
+  // Animate number
+  animateNum('scoreNum', 0, score, 1500);
+  document.getElementById('scoreExpl').textContent = r.score_explanation || '';
+
+  // Roast lines
+  const linesEl = document.getElementById('roastLines');
+  linesEl.innerHTML = '';
+  (r.roast_lines || []).forEach(line => {
+    const div = document.createElement('div');
+    div.className = 'roast-line';
+    div.textContent = line;
+    linesEl.appendChild(div);
+  });
+
+  // Stats
+  const stats = r.wallet_stats || {};
+  const grid = document.getElementById('statsGrid');
+  grid.innerHTML = '';
+  const items = [
+    [stats.sol_balance ? `${stats.sol_balance} SOL` : '—', 'Balance'],
+    [stats.sol_usd ? `$${stats.sol_usd.toLocaleString()}` : '—', 'USD Value'],
+    [stats.token_count ?? '—', 'Tokens'],
+    [stats.transaction_count ?? '—', 'Transactions'],
+    [stats.failed_transactions ?? '—', 'Failed TXs'],
+    [stats.wallet_age_days ? `${stats.wallet_age_days}d` : '—', 'Wallet Age'],
+    [stats.swap_count ?? '—', 'Swaps'],
+    [stats.memecoin_count ?? '—', 'Memecoins'],
+  ];
+  items.forEach(([val, label]) => {
+    grid.innerHTML += `<div class="stat-item"><div class="stat-val">${val}</div><div class="stat-label">${label}</div></div>`;
+  });
+}
+
+function animateNum(id, start, end, duration) {
+  const el = document.getElementById(id);
+  const startTime = performance.now();
+  function update(now) {
+    const progress = Math.min((now - startTime) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(start + (end - start) * eased);
+    if (progress < 1) requestAnimationFrame(update);
+  }
+  requestAnimationFrame(update);
+}
+
+function shareTwitter() {
+  if (!currentRoast) return;
+  const text = `My Solana wallet got roasted 🔥\n\nI'm "${currentRoast.title}" with a ${currentRoast.degen_score}/100 degen score.\n\nThink you can handle it?`;
+  const url = window.location.origin + '/' + currentWallet;
+  window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+}
+
+function downloadCard() {
+  if (!currentWallet) return;
+  window.open(`/api/roast/${currentWallet}/image`, '_blank');
+}
+
+function resetUI() {
+  hide('result'); hide('error');
+  show('hero'); show('recent');
+  document.getElementById('walletInput').value = '';
+  document.getElementById('walletInput').focus();
+  window.history.replaceState({}, '', '/');
+}
+
+async function loadRecent() {
+  try {
+    const res = await fetch('/api/recent');
+    const data = await res.json();
+    const list = document.getElementById('recentList');
+    list.innerHTML = '';
+    if (!data.length) { list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">No roasts yet. Be the first! 🔥</div>'; return; }
+    data.forEach(r => {
+      list.innerHTML += `<div class="recent-item"><span class="recent-title">"${r.title}"</span><span class="recent-score">${r.degen_score}/100</span></div>`;
+    });
+  } catch(e) {}
+}
+
+function show(id) { document.getElementById(id).style.display = ''; document.getElementById(id).classList?.add('active'); }
+function hide(id) { const el = document.getElementById(id); el.style.display = 'none'; el.classList?.remove('active'); }
+</script>
+</body>
+</html>

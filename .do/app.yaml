@@ -1,0 +1,19 @@
+name: solana-roast-bot
+region: fra
+services:
+  - name: api
+    github:
+      repo: 0xksure/solana-roast-bot
+      branch: master
+      deploy_on_push: true
+    dockerfile_path: Dockerfile
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    http_port: 8080
+    envs:
+      - key: ANTHROPIC_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: HELIUS_API_KEY
+        scope: RUN_TIME
+        type: SECRET
