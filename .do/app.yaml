@@ -17,3 +17,11 @@ services:
       - key: HELIUS_API_KEY
         scope: RUN_TIME
         type: SECRET
+      - key: SENTRY_DSN
+        scope: RUN_TIME
+        type: GENERAL
+        value: ""
+      - key: ENVIRONMENT
+        scope: RUN_TIME
+        type: GENERAL
+        value: "production"

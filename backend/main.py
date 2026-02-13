@@ -10,6 +10,20 @@ import traceback
 from collections import defaultdict
 from pathlib import Path
 
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
+
+# Initialize Sentry
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[FastApiIntegration(), StarletteIntegration()],
+        traces_sample_rate=0.2,
+        environment=os.environ.get("ENVIRONMENT", "production"),
+    )
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
@@ -136,7 +150,11 @@ async def api_roast(req: RoastRequest, request: Request):
         roast = await asyncio.wait_for(generate_roast(analysis), timeout=ROAST_TIMEOUT)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Roast timed out — this wallet is too complex even for us 🕐")
-    except Exception:
+    except Exception as e:
+        traceback.print_exc()
+        print(f"❌ Roast failed for {wallet}: {e}")
+        sentry_sdk.capture_exception(e)
+        sentry_sdk.set_context("wallet", {"address": wallet})
         raise HTTPException(status_code=500, detail=_funny_error())
 
     _set_cache(wallet, roast)
