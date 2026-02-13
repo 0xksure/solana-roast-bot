@@ -365,3 +365,71 @@ body::before{
 .recent-wallet{font-family:monospace;font-size:0.7rem;color:#555}
 .recent-item{cursor:pointer;transition:all 0.2s}
 .recent-item:hover{background:rgba(255,255,255,0.06);transform:translateX(4px)}
+
+/* Mode Toggle */
+.mode-toggle{display:flex;gap:0;justify-content:center;margin-bottom:28px;background:rgba(15,15,35,0.8);border-radius:12px;border:1px solid var(--glass-border);overflow:hidden;max-width:360px;margin-left:auto;margin-right:auto}
+.mode-tab{flex:1;padding:12px 20px;background:transparent;border:none;color:var(--muted);font-family:'Orbitron',sans-serif;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .3s;letter-spacing:1px}
+.mode-tab.active{background:linear-gradient(135deg,rgba(153,69,255,0.2),rgba(255,45,120,0.2));color:var(--text);box-shadow:inset 0 0 20px rgba(153,69,255,0.1)}
+.mode-tab:hover:not(.active){color:var(--cyan)}
+
+/* Battle Mode */
+.battle-mode{text-align:center;padding:20px 0}
+.battle-header{margin-bottom:28px}
+.battle-title{font-family:'Orbitron',sans-serif;font-size:2rem;font-weight:900;color:var(--pink);text-shadow:0 0 20px rgba(255,45,120,0.4),0 0 40px rgba(255,45,120,0.2);margin-bottom:8px}
+.battle-subtitle{color:var(--muted);font-size:1rem}
+.battle-inputs{display:flex;align-items:center;gap:16px;max-width:680px;margin:0 auto 24px}
+.battle-input-card{flex:1;background:rgba(15,15,35,0.8);border:1px solid var(--glass-border);border-radius:14px;padding:16px}
+.battle-input-card input{width:100%;background:rgba(10,10,26,0.8);border:1px solid rgba(153,69,255,0.2);border-radius:8px;padding:12px 14px;color:var(--text);font-size:.9rem;outline:none;font-family:'Inter',sans-serif;transition:border-color .3s}
+.battle-input-card input:focus{border-color:var(--cyan);box-shadow:0 0 12px rgba(0,240,255,0.15)}
+.battle-label{display:block;font-family:'Orbitron',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:2px;margin-bottom:8px;color:var(--cyan)}
+.battle-vs-divider{display:flex;align-items:center;justify-content:center}
+.vs-text{font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:900;color:var(--pink);text-shadow:0 0 20px rgba(255,45,120,0.6),0 0 40px rgba(255,45,120,0.3);animation:vsPulse 2s ease-in-out infinite}
+@keyframes vsPulse{0%,100%{text-shadow:0 0 20px rgba(255,45,120,0.6),0 0 40px rgba(255,45,120,0.3)}50%{text-shadow:0 0 30px rgba(255,45,120,0.8),0 0 60px rgba(255,45,120,0.5),0 0 80px rgba(255,45,120,0.2)}}
+.battle-btn{margin:0 auto;display:block}
+
+/* Battle Result */
+.battle-result{padding:20px 0}
+.battle-result-title{font-family:'Orbitron',sans-serif;font-size:1.8rem;font-weight:900;text-align:center;color:var(--pink);text-shadow:0 0 20px rgba(255,45,120,0.4);margin-bottom:24px}
+.battle-cards{display:flex;gap:16px;align-items:stretch;margin-bottom:32px;position:relative}
+.battle-card{flex:1;background:var(--card);backdrop-filter:blur(20px);border:1px solid var(--glass-border);border-radius:16px;padding:24px 20px;text-align:center;position:relative;transition:all .3s}
+.battle-card.winner-card{border-color:rgba(255,215,0,0.5);box-shadow:0 0 30px rgba(255,215,0,0.15),0 0 60px rgba(255,215,0,0.08)}
+.crown{font-size:2rem;position:absolute;top:-18px;left:50%;transform:translateX(-50%);animation:crownBounce 2s ease-in-out infinite}
+@keyframes crownBounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-6px)}}
+.battle-card-wallet{font-family:monospace;font-size:.75rem;color:var(--muted);margin-bottom:8px}
+.battle-card-title{font-family:'Orbitron',sans-serif;font-size:1rem;font-weight:700;color:var(--orange);margin-bottom:8px}
+.battle-card-score{font-family:'Orbitron',sans-serif;font-size:2.4rem;font-weight:900;margin-bottom:12px}
+.score-of{font-size:1rem;color:var(--muted);font-weight:400}
+.battle-card-lines{text-align:left}
+.battle-roast-line{font-size:.85rem;color:var(--text);line-height:1.5;margin-bottom:8px;padding-left:12px;border-left:2px solid var(--orange);opacity:.9}
+.battle-vs-center{display:flex;align-items:center;justify-content:center;min-width:50px}
+.vs-glow{font-family:'Orbitron',sans-serif;font-size:1.6rem;font-weight:900;color:var(--pink);text-shadow:0 0 20px rgba(255,45,120,0.8),0 0 40px rgba(255,45,120,0.4),0 0 60px rgba(255,45,120,0.2);animation:vsPulse 2s ease-in-out infinite}
+
+/* Stat Comparison Bars */
+.battle-stats-comparison{background:var(--card);backdrop-filter:blur(20px);border:1px solid var(--glass-border);border-radius:16px;padding:24px;margin-bottom:24px}
+.comparison-title{font-family:'Orbitron',sans-serif;font-size:.85rem;color:var(--cyan);text-align:center;margin-bottom:20px;letter-spacing:2px}
+.stat-bar-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.stat-bar-val{font-family:'Orbitron',sans-serif;font-size:.8rem;color:var(--muted);min-width:60px}
+.stat-bar-val.left{text-align:right}
+.stat-bar-val.right{text-align:left}
+.stat-bar-val.winner{color:var(--orange);font-weight:700}
+.stat-bar-center{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.stat-bar-label{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-family:'Orbitron',sans-serif}
+.stat-bar-track{width:100%;height:6px;background:rgba(15,15,35,0.8);border-radius:3px;overflow:hidden}
+.stat-bar-fill{height:100%;border-radius:3px;transition:width .8s ease}
+.stat-bar-fill.left{background:linear-gradient(90deg,var(--orange),var(--pink));float:right}
+.stat-bar-fill.right{background:linear-gradient(90deg,var(--cyan),var(--purple))}
+
+/* Battle Verdict */
+.battle-verdict{background:linear-gradient(135deg,rgba(153,69,255,0.1),rgba(255,45,120,0.1));border:1px solid rgba(153,69,255,0.3);border-radius:16px;padding:24px;text-align:center;margin-bottom:24px}
+.battle-verdict h3{font-family:'Orbitron',sans-serif;font-size:1.1rem;color:var(--orange);margin-bottom:12px}
+.verdict-text{font-size:1rem;color:var(--text);line-height:1.6;margin-bottom:8px}
+.verdict-winner{font-family:'Orbitron',sans-serif;font-size:1.2rem;font-weight:900;color:var(--green);text-shadow:0 0 10px rgba(34,197,94,0.3)}
+
+@media(max-width:768px){
+  .battle-inputs{flex-direction:column}
+  .battle-vs-divider{margin:8px 0}
+  .battle-cards{flex-direction:column}
+  .battle-vs-center{margin:8px 0}
+  .stat-bar-val{min-width:45px;font-size:.7rem}
+  .battle-title{font-size:1.4rem}
+}

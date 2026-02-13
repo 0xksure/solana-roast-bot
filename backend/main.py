@@ -30,6 +30,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import anthropic
+
 from backend.roaster.card_generator import generate_card
 from backend.roaster.roast_engine import generate_roast
 from backend.roaster.wallet_analyzer import analyze_wallet
@@ -185,6 +187,11 @@ class RoastRequest(BaseModel):
     wallet: str
 
 
+class BattleRequest(BaseModel):
+    wallet1: str
+    wallet2: str
+
+
 @app.post("/api/roast")
 async def api_roast(req: RoastRequest, request: Request):
     wallet = _validate_wallet(req.wallet)
@@ -232,6 +239,113 @@ async def api_roast(req: RoastRequest, request: Request):
     _save_stats(stats)
 
     return roast
+
+
+async def _get_or_generate_roast(wallet: str) -> dict:
+    """Get existing roast from cache/DB or generate a new one."""
+    cached = _get_cached(wallet)
+    if cached:
+        return cached
+    history = db.get_roast_history(wallet, limit=1)
+    if history:
+        roast = history[0]["roast"]
+        _set_cache(wallet, roast)
+        return roast
+    # Generate fresh
+    analysis = db.get_cached_analysis(wallet)
+    if not analysis:
+        analysis = await asyncio.wait_for(analyze_wallet(wallet), timeout=ROAST_TIMEOUT)
+        db.save_analysis(wallet, analysis)
+    roast = await asyncio.wait_for(generate_roast(analysis), timeout=ROAST_TIMEOUT)
+    score = roast.get("degen_score", 0)
+    roast["percentile"] = db.get_percentile(score)
+    roast["achievements"] = _compute_achievements(roast, analysis)
+    _set_cache(wallet, roast)
+    db.save_roast(wallet, roast)
+    return roast
+
+
+async def _generate_battle_verdict(roast1: dict, roast2: dict, wallet1: str, wallet2: str) -> dict:
+    """Generate a battle verdict comparing two roasts."""
+    s1 = roast1.get("wallet_stats", {})
+    s2 = roast2.get("wallet_stats", {})
+    score1 = roast1.get("degen_score", 0)
+    score2 = roast2.get("degen_score", 0)
+
+    winner = "wallet1" if score1 >= score2 else "wallet2"
+    winner_addr = wallet1 if winner == "wallet1" else wallet2
+
+    # Generate AI verdict
+    raw_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    api_key = "".join(raw_key.split())
+    verdict_text = ""
+    if api_key:
+        try:
+            client = anthropic.AsyncAnthropic(api_key=api_key)
+            msg = await client.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=200,
+                system="You are the Solana Roast Bot. Give a 2-sentence battle verdict comparing two wallets. Be savage, funny, and specific. Reference the stats.",
+                messages=[{"role": "user", "content": f"""Battle verdict needed:
+Wallet 1 ({wallet1[:8]}...): degen score {score1}, {s1.get('sol_balance', 0)} SOL, {s1.get('token_count', 0)} tokens, {s1.get('failure_rate', 0)}% fail rate, {s1.get('swap_count', 0)} swaps, title: "{roast1.get('title', '')}"
+Wallet 2 ({wallet2[:8]}...): degen score {score2}, {s2.get('sol_balance', 0)} SOL, {s2.get('token_count', 0)} tokens, {s2.get('failure_rate', 0)}% fail rate, {s2.get('swap_count', 0)} swaps, title: "{roast2.get('title', '')}"
+Winner: Wallet {'1' if winner == 'wallet1' else '2'}. Give exactly 2 sentences. No JSON, just plain text."""}],
+            )
+            verdict_text = msg.content[0].text.strip()
+        except Exception:
+            verdict_text = f"With a degen score of {max(score1, score2)}, the winner is clearly more unhinged. The loser should probably just stake SOL and call it a day."
+
+    return {
+        "winner": winner,
+        "score1": score1,
+        "score2": score2,
+        "verdict": verdict_text,
+        "comparisons": {
+            "sol_balance": {"wallet1": s1.get("sol_balance", 0), "wallet2": s2.get("sol_balance", 0)},
+            "token_count": {"wallet1": s1.get("token_count", 0), "wallet2": s2.get("token_count", 0)},
+            "failure_rate": {"wallet1": s1.get("failure_rate", 0), "wallet2": s2.get("failure_rate", 0)},
+            "swap_count": {"wallet1": s1.get("swap_count", 0), "wallet2": s2.get("swap_count", 0)},
+            "degen_score": {"wallet1": score1, "wallet2": score2},
+        },
+    }
+
+
+@app.post("/api/battle")
+async def api_battle(req: BattleRequest, request: Request):
+    wallet1 = _validate_wallet(req.wallet1)
+    wallet2 = _validate_wallet(req.wallet2)
+
+    if wallet1 == wallet2:
+        raise HTTPException(status_code=400, detail="Can't battle yourself, ser. Use two different wallets.")
+
+    ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(ip, wallet1) or not _check_rate_limit(ip, wallet2):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Touch some grass and try again later. 🌱")
+
+    try:
+        roast1, roast2 = await asyncio.gather(
+            _get_or_generate_roast(wallet1),
+            _get_or_generate_roast(wallet2),
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Battle timed out — these wallets are too complex 🕐")
+    except Exception as e:
+        traceback.print_exc()
+        sentry_sdk.capture_exception(e)
+        raise HTTPException(status_code=500, detail=_funny_error())
+
+    _record_rate_limit(ip, wallet1)
+    _record_rate_limit(ip, wallet2)
+
+    battle_summary = await _generate_battle_verdict(roast1, roast2, wallet1, wallet2)
+
+    return {
+        "wallet1": wallet1,
+        "wallet2": wallet2,
+        "roast1": roast1,
+        "roast2": roast2,
+        "battle_summary": battle_summary,
+    }
 
 
 @app.get("/api/roast/{wallet}/image")

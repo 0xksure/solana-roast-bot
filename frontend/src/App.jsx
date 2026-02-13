@@ -11,23 +11,28 @@ import ShareActions from './components/ShareActions';
 import Leaderboard from './components/Leaderboard';
 import RecentRoasts from './components/RecentRoasts';
 import Footer from './components/Footer';
+import BattleMode from './components/BattleMode';
+import BattleResult from './components/BattleResult';
 import { useRoast } from './hooks/useRoast';
+import { useBattle } from './hooks/useBattle';
 
 export default function App() {
   const { roast, loading, error, wallet, doRoast, reset } = useRoast();
+  const { battle, loading: battleLoading, error: battleError, doBattle, resetBattle } = useBattle();
   const { publicKey } = useWallet();
   const prevKey = useRef(null);
+  const [battleMode, setBattleMode] = useState(false);
 
   // Auto-roast when wallet connects
   useEffect(() => {
-    if (publicKey) {
+    if (publicKey && !battleMode) {
       const addr = publicKey.toBase58();
       if (addr !== prevKey.current) {
         prevKey.current = addr;
         doRoast(addr);
       }
     }
-  }, [publicKey, doRoast]);
+  }, [publicKey, doRoast, battleMode]);
 
   // URL param on mount
   useEffect(() => {
@@ -43,36 +48,51 @@ export default function App() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleReset = () => {
+    reset();
+    resetBattle();
+  };
+
+  const isLoading = loading || battleLoading;
+  const hasResult = roast || battle;
+
   return (
     <>
-      <Navbar onReset={reset} />
+      <Navbar onReset={handleReset} />
       <div className="container">
-        {!loading && !roast && (
-          <Hero onRoast={doRoast} error={error} />
+        {!isLoading && !hasResult && (
+          <>
+            <Hero onRoast={doRoast} error={error} battleMode={battleMode} onToggleBattle={setBattleMode} />
+            {battleMode && <BattleMode onBattle={doBattle} error={battleError} />}
+          </>
         )}
 
-        {error && !loading && !roast && (
+        {error && !isLoading && !hasResult && !battleMode && (
           <div className="error active">💀 {error}</div>
         )}
 
-        {loading && <Loading />}
+        {isLoading && <Loading />}
 
-        <FireParticles active={!!roast && !loading} />
+        <FireParticles active={!!hasResult && !isLoading} />
 
-        {roast && !loading && (
+        {roast && !loading && !battleMode && (
           <div className="result active">
             <div className="result-card">
               <RoastResult roast={roast} wallet={wallet} />
               <Achievements achievements={roast.achievements} percentile={roast.percentile} />
               <StatsCards stats={roast.wallet_stats} />
               <WalletAutopsy stats={roast.wallet_stats} />
-              <ShareActions roast={roast} wallet={wallet} onReset={reset} />
+              <ShareActions roast={roast} wallet={wallet} onReset={handleReset} />
             </div>
           </div>
         )}
 
-        {!loading && <Leaderboard visible={!roast} onRoast={doRoast} />}
-        {!loading && <RecentRoasts visible={!roast} onRoast={doRoast} />}
+        {battle && !battleLoading && (
+          <BattleResult battle={battle} onReset={() => { resetBattle(); setBattleMode(true); }} />
+        )}
+
+        {!isLoading && !hasResult && <Leaderboard visible={!hasResult} onRoast={doRoast} />}
+        {!isLoading && !hasResult && <RecentRoasts visible={!hasResult} onRoast={doRoast} />}
         <Footer />
       </div>
     </>
