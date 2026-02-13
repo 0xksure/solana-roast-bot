@@ -313,3 +313,14 @@ body::before{
   .actions button{width:100%;min-height:48px}
   .autopsy-stats-row{grid-template-columns:repeat(2,1fr)}
 }
+
+/* Roast History */
+.roast-history{margin-top:2rem;padding:1.5rem;background:rgba(255,255,255,0.03);border-radius:16px;border:1px solid rgba(255,255,255,0.06)}
+.roast-history-badge{display:inline-block;background:linear-gradient(135deg,#ff6b2b,#ff2d78);padding:4px 14px;border-radius:20px;font-size:0.85rem;font-weight:700;margin-bottom:1rem}
+.roast-history-title{font-size:1.1rem;margin-bottom:1rem;color:#ccc}
+.roast-history-list{display:flex;flex-direction:column;gap:0.75rem}
+.roast-history-item{padding:0.75rem 1rem;background:rgba(255,255,255,0.04);border-radius:10px;border:1px solid rgba(255,255,255,0.05)}
+.roast-history-item-header{display:flex;justify-content:space-between;align-items:center;gap:1rem}
+.roast-history-item-title{font-size:0.95rem;color:#ff7832;font-style:italic}
+.roast-history-item-score{font-weight:700;color:#00f0ff;font-size:0.9rem}
+.roast-history-item-date{font-size:0.75rem;color:#666;margin-top:4px}

@@ -33,8 +33,13 @@ from pydantic import BaseModel
 from backend.roaster.card_generator import generate_card
 from backend.roaster.roast_engine import generate_roast
 from backend.roaster.wallet_analyzer import analyze_wallet
+from backend.roaster import db
 
 app = FastAPI(title="Solana Roast Bot")
+
+@app.on_event("startup")
+def startup():
+    db.init_db()
 
 # CORS
 app.add_middleware(
@@ -146,7 +151,11 @@ async def api_roast(req: RoastRequest, request: Request):
         return cached
 
     try:
-        analysis = await asyncio.wait_for(analyze_wallet(wallet), timeout=ROAST_TIMEOUT)
+        # Check DB cache for analysis (saves RPC calls)
+        analysis = db.get_cached_analysis(wallet)
+        if not analysis:
+            analysis = await asyncio.wait_for(analyze_wallet(wallet), timeout=ROAST_TIMEOUT)
+            db.save_analysis(wallet, analysis)
         roast = await asyncio.wait_for(generate_roast(analysis), timeout=ROAST_TIMEOUT)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Roast timed out — this wallet is too complex even for us 🕐")
@@ -160,7 +169,10 @@ async def api_roast(req: RoastRequest, request: Request):
     _set_cache(wallet, roast)
     _record_rate_limit(ip, wallet)
 
-    # Update stats
+    # Persist to DB
+    db.save_roast(wallet, roast)
+
+    # Update stats (legacy file-based)
     stats = _load_stats()
     stats["total_roasts"] = stats.get("total_roasts", 0) + 1
     stats["wallets"][wallet] = stats["wallets"].get(wallet, 0) + 1
@@ -186,27 +198,18 @@ async def api_roast_image(wallet: str):
 
 @app.get("/api/stats")
 async def api_stats():
-    stats = _load_stats()
-    top_wallets = sorted(stats.get("wallets", {}).items(), key=lambda x: x[1], reverse=True)[:10]
-    return {
-        "total_roasts": stats.get("total_roasts", 0),
-        "top_wallets": [{"wallet": w, "count": c} for w, c in top_wallets],
-    }
+    return db.get_stats()
 
 
 @app.get("/api/recent")
 async def api_recent():
-    recent = []
-    now = time.time()
-    for wallet, entry in sorted(roast_cache.items(), key=lambda x: x[1]["timestamp"], reverse=True)[:10]:
-        if now - entry["timestamp"] < CACHE_TTL:
-            r = entry["roast"]
-            recent.append({
-                "title": r.get("title", ""),
-                "degen_score": r.get("degen_score", 0),
-                "summary": r.get("summary", ""),
-            })
-    return recent
+    return db.get_recent_roasts()
+
+
+@app.get("/api/roast/{wallet}/history")
+async def api_roast_history(wallet: str):
+    wallet = _validate_wallet(wallet)
+    return db.get_roast_history(wallet)
 
 
 def _og_html(wallet: str, roast: dict, base_url: str = "") -> str:

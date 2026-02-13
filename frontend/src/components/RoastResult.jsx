@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
+import RoastHistory from './RoastHistory';
 
-export default function RoastResult({ roast }) {
+export default function RoastResult({ roast, wallet }) {
   const scoreRef = useRef(null);
   const fillRef = useRef(null);
   const score = roast.degen_score || 0;
@@ -65,6 +66,7 @@ export default function RoastResult({ roast }) {
           </div>
         ))}
       </div>
+      {wallet && <RoastHistory wallet={wallet} />}
     </>
   );
 }

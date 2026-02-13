@@ -60,7 +60,7 @@ export default function App() {
         {roast && !loading && (
           <div className="result active">
             <div className="result-card">
-              <RoastResult roast={roast} />
+              <RoastResult roast={roast} wallet={wallet} />
               <StatsCards stats={roast.wallet_stats} />
               <WalletAutopsy stats={roast.wallet_stats} />
               <ShareActions roast={roast} wallet={wallet} onReset={reset} />
