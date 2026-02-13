@@ -4,7 +4,7 @@ import time
 import os
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent.parent / "data" / "roasts.db"
+DB_PATH = Path(os.environ.get("DB_PATH", str(Path(__file__).parent.parent.parent / "data" / "roasts.db")))
 
 def _get_conn():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
