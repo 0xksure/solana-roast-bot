@@ -6,10 +6,16 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
+import os
+
 import httpx
 
 SOLANA_RPC = "https://api.mainnet-beta.solana.com"
 SOL_MINT = "So11111111111111111111111111111111111111112"
+
+# Helius for enhanced transaction history
+HELIUS_API_KEY = "".join(os.environ.get("HELIUS_API_KEY", "").split())
+HELIUS_BASE = f"https://api.helius.xyz/v0" if HELIUS_API_KEY else ""
 
 # --- Token list cache ---
 _token_cache: dict[str, dict] = {}
@@ -165,6 +171,117 @@ async def _get_signatures(client: httpx.AsyncClient, wallet: str, limit: int = 1
             break  # No more pages
         before = result[-1].get("signature")
     return all_sigs
+
+
+async def _get_helius_history(client: httpx.AsyncClient, wallet: str, max_pages: int = 5) -> list:
+    """Fetch full parsed transaction history from Helius Enhanced API."""
+    if not HELIUS_API_KEY:
+        return []
+    
+    all_txns = []
+    before_sig = ""
+    url = f"{HELIUS_BASE}/addresses/{wallet}/transactions?api-key={HELIUS_API_KEY}"
+    
+    for _ in range(max_pages):
+        try:
+            page_url = url
+            if before_sig:
+                page_url += f"&before={before_sig}"
+            resp = await client.get(page_url, timeout=15)
+            if resp.status_code != 200:
+                print(f"⚠️ Helius API returned {resp.status_code}")
+                break
+            txns = resp.json()
+            if not txns:
+                break
+            all_txns.extend(txns)
+            before_sig = txns[-1].get("signature", "")
+            if len(txns) < 100:  # Last page
+                break
+        except Exception as e:
+            print(f"⚠️ Helius fetch error: {e}")
+            break
+    
+    return all_txns
+
+
+def _analyze_helius_txns(txns: list) -> dict:
+    """Analyze Helius enhanced transaction data for richer insights."""
+    swap_count = 0
+    nft_count = 0
+    programs = defaultdict(int)
+    types = defaultdict(int)
+    total_sol_moved = 0.0
+    swaps = []
+    
+    for tx in txns:
+        tx_type = tx.get("type", "UNKNOWN")
+        types[tx_type] += 1
+        
+        if tx_type == "SWAP":
+            swap_count += 1
+            # Extract swap details from tokenTransfers
+            sol_in = 0
+            sol_out = 0
+            for transfer in tx.get("tokenTransfers", []):
+                if transfer.get("mint") == SOL_MINT:
+                    amount = transfer.get("tokenAmount", 0)
+                    if transfer.get("fromUserAccount") == tx.get("feePayer"):
+                        sol_out += amount
+                    else:
+                        sol_in += amount
+            swaps.append({
+                "sol_in": sol_in, "sol_out": sol_out,
+                "timestamp": tx.get("timestamp", 0),
+                "signature": tx.get("signature", ""),
+            })
+        elif tx_type in ("NFT_SALE", "NFT_MINT", "NFT_LISTING", "NFT_BID"):
+            nft_count += 1
+        
+        # Track programs
+        for inst in tx.get("instructions", []):
+            pid = inst.get("programId", "")
+            if pid:
+                programs[pid] += 1
+        
+        # Track native SOL transfers
+        for nt in tx.get("nativeTransfers", []):
+            total_sol_moved += abs(nt.get("amount", 0)) / 1e9
+    
+    # PnL from swaps
+    wins = 0
+    losses = 0
+    total_pnl = 0
+    biggest_win_val = 0
+    biggest_loss_val = 0
+    
+    for s in swaps:
+        net = s["sol_in"] - s["sol_out"]
+        total_pnl += net
+        if net > 0:
+            wins += 1
+            if net > biggest_win_val:
+                biggest_win_val = net
+        elif net < 0:
+            losses += 1
+            if abs(net) > biggest_loss_val:
+                biggest_loss_val = abs(net)
+    
+    total_trades = wins + losses
+    
+    return {
+        "swap_count": swap_count,
+        "nft_count": nft_count,
+        "programs": dict(programs),
+        "tx_types": dict(types),
+        "total_sol_moved": round(total_sol_moved, 2),
+        "total_swaps_detected": len(swaps),
+        "estimated_pnl_sol": round(total_pnl, 4),
+        "win_rate": round(wins / total_trades * 100, 1) if total_trades > 0 else 0,
+        "biggest_win": round(biggest_win_val, 4) if biggest_win_val else None,
+        "biggest_loss": round(biggest_loss_val, 4) if biggest_loss_val else None,
+        "total_sol_volume": round(sum(s["sol_out"] for s in swaps), 2),
+    }
 
 
 async def _get_token_accounts(client: httpx.AsyncClient, wallet: str) -> list:
@@ -855,6 +972,62 @@ def _build_activity_heatmap(sigs: list) -> dict:
     return heatmap
 
 
+def _build_net_worth_timeline_helius(txns: list, wallet: str) -> list:
+    """Build net worth timeline from Helius enhanced transactions."""
+    monthly: dict[str, float] = defaultdict(float)
+    running = 0.0
+    
+    # Sort by timestamp
+    sorted_txns = sorted(txns, key=lambda t: t.get("timestamp", 0))
+    
+    for tx in sorted_txns:
+        ts = tx.get("timestamp", 0)
+        if not ts:
+            continue
+        month = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m")
+        
+        # Track SOL flow
+        for nt in tx.get("nativeTransfers", []):
+            amount_sol = nt.get("amount", 0) / 1e9
+            if nt.get("toUserAccount") == wallet:
+                running += amount_sol
+            elif nt.get("fromUserAccount") == wallet:
+                running -= amount_sol
+        
+        monthly[month] = running
+    
+    return [{"month": m, "sol": round(v, 4)} for m, v in sorted(monthly.items())]
+
+
+def _build_protocol_stats_helius(txns: list) -> list:
+    """Build protocol stats from Helius enhanced transactions."""
+    protocol_counts: dict[str, int] = defaultdict(int)
+    
+    for tx in txns:
+        source = tx.get("source", "UNKNOWN")
+        tx_type = tx.get("type", "UNKNOWN")
+        
+        # Map Helius source to readable names
+        name_map = {
+            "JUPITER": "Jupiter", "RAYDIUM": "Raydium", "ORCA": "Orca",
+            "MARINADE": "Marinade", "MARGINFI": "Marginfi", "TENSOR": "Tensor",
+            "MAGIC_EDEN": "Magic Eden", "PHANTOM": "Phantom", "METEORA": "Meteora",
+            "SOLEND": "Solend", "DRIFT": "Drift", "OPENBOOK": "OpenBook",
+            "PUMP_FUN": "Pump.fun", "MOONSHOT": "Moonshot",
+        }
+        name = name_map.get(source)
+        if name:
+            protocol_counts[name] += 1
+        elif source not in ("SYSTEM_PROGRAM", "UNKNOWN", ""):
+            protocol_counts[source.replace("_", " ").title()] += 1
+    
+    total = sum(protocol_counts.values())
+    return [
+        {"name": n, "tx_count": c, "pct": round(c / total * 100, 1) if total > 0 else 0}
+        for n, c in sorted(protocol_counts.items(), key=lambda x: -x[1])
+    ][:15]
+
+
 async def analyze_wallet(wallet: str) -> dict:
     """Main entry point — returns full wallet analysis dict."""
     async with httpx.AsyncClient() as client:
@@ -879,7 +1052,21 @@ async def analyze_wallet(wallet: str) -> dict:
         sig_analysis = _analyze_signatures(signatures)
         token_list_parsed = _analyze_tokens(token_accounts, token_list)
 
-        # Fetch sampled transactions across full history (max 30 calls, rate limited)
+        # Try Helius enhanced history first (full parsed history in one call)
+        helius_txns = []
+        helius_analysis = None
+        if HELIUS_API_KEY:
+            try:
+                helius_txns = await asyncio.wait_for(
+                    _get_helius_history(client, wallet, max_pages=5), timeout=20
+                )
+                if helius_txns:
+                    helius_analysis = _analyze_helius_txns(helius_txns)
+                    print(f"✅ Helius: {len(helius_txns)} txns, {helius_analysis['swap_count']} swaps")
+            except Exception as e:
+                print(f"⚠️ Helius failed, falling back to RPC: {e}")
+
+        # Fallback: sample transactions from RPC
         txn_analysis = {"programs_used": {}, "swap_count": 0, "nft_activity": 0}
         swap_analysis = {
             "total_swaps_detected": 0, "estimated_pnl_sol": 0,
@@ -887,7 +1074,31 @@ async def analyze_wallet(wallet: str) -> dict:
             "win_rate": 0, "total_sol_volume": 0,
         }
         sampled_txns = []
-        if signatures:
+        if helius_analysis:
+            # Use Helius data
+            txn_analysis = {
+                "programs_used": helius_analysis.get("programs", {}),
+                "swap_count": helius_analysis.get("swap_count", 0),
+                "nft_activity": helius_analysis.get("nft_count", 0),
+            }
+            swap_analysis = {
+                "total_swaps_detected": helius_analysis.get("total_swaps_detected", 0),
+                "estimated_pnl_sol": helius_analysis.get("estimated_pnl_sol", 0),
+                "biggest_loss": helius_analysis.get("biggest_loss"),
+                "biggest_win": helius_analysis.get("biggest_win"),
+                "win_rate": helius_analysis.get("win_rate", 0),
+                "total_sol_volume": helius_analysis.get("total_sol_volume", 0),
+            }
+            # Also update signature count if Helius gave us more
+            if len(helius_txns) > len(signatures):
+                sig_analysis["total"] = len(helius_txns)
+                # Recalculate first timestamp from Helius
+                timestamps = [t.get("timestamp", 0) for t in helius_txns if t.get("timestamp")]
+                if timestamps:
+                    earliest = min(timestamps)
+                    if sig_analysis["first_ts"] is None or earliest < sig_analysis["first_ts"]:
+                        sig_analysis["first_ts"] = earliest
+        elif signatures:
             try:
                 sampled_txns = await _get_sampled_transactions(client, signatures, wallet, max_calls=30)
                 txn_analysis = _analyze_recent_txns(sampled_txns)
@@ -912,7 +1123,7 @@ async def analyze_wallet(wallet: str) -> dict:
 
         # Analytics: net worth timeline, protocol stats, loss breakdown, heatmap
         all_swaps = []
-        if sampled_txns:
+        if sampled_txns and not helius_analysis:
             try:
                 for tx in sampled_txns:
                     swaps = _extract_swaps_from_tx(tx, wallet, token_list)
@@ -920,8 +1131,13 @@ async def analyze_wallet(wallet: str) -> dict:
             except Exception:
                 pass
 
-        net_worth_timeline = _build_net_worth_timeline(signatures, sampled_txns, wallet)
-        protocol_stats = _build_protocol_stats(sampled_txns)
+        # Build chart data — use Helius-enriched data when available
+        if helius_txns:
+            net_worth_timeline = _build_net_worth_timeline_helius(helius_txns, wallet)
+            protocol_stats = _build_protocol_stats_helius(helius_txns)
+        else:
+            net_worth_timeline = _build_net_worth_timeline(signatures, sampled_txns, wallet)
+            protocol_stats = _build_protocol_stats(sampled_txns)
         loss_by_token = _build_loss_by_token(all_swaps)
         loss_by_period = _build_loss_by_period(all_swaps)
         activity_heatmap = _build_activity_heatmap(signatures)
