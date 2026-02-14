@@ -19,6 +19,11 @@ Solana Roast Bot analyzes any Solana wallet's on-chain history and generates a p
 - 🕰️ **Deep history** — Swap parsing (Jupiter, Raydium, Orca program IDs), PnL estimation, win rate, market timeline, inactive gap detection, token graveyard
 - 🌙 **Behavioral analysis** — Detects late-night trading, burst patterns, failure rates
 - 🛡️ **Security hardened** — XSS prevention, IP+wallet rate limiting, async timeouts, CORS
+- 🏆 **FairScale Reputation** — On-chain reputation scoring via FairScale API: trust vs degen radar chart, tier badges (Platinum/Gold/Silver/Bronze), reputation-aware roasts, "Most Trusted Degens" leaderboard
+- ⚔️ **Roast Battles** — Head-to-head wallet comparison with AI verdict, stat bars, and winner crown
+- 🎖️ **Achievement Badges** — Token Graveyard, Swap Addict, OG, Exit Liquidity, Whale Alert, and more
+- 📊 **Percentile Ranking** — "More degen than X% of wallets roasted"
+- 🏅 **Leaderboard** — Top 20 degens + Most Trusted Degens (combined degen × reputation)
 
 ## How Solana Is Used
 
@@ -39,7 +44,9 @@ All data comes directly from Solana mainnet RPC — no third-party indexers requ
 - **Backend:** Python, FastAPI, httpx (async)
 - **AI:** Anthropic Claude 3.5 Haiku (cost-optimized)
 - **Card Generation:** Pillow (PIL)
-- **Data:** Solana RPC (mainnet), CoinGecko/Jupiter (SOL price), Jupiter Token List
+- **Reputation:** FairScale API (on-chain reputation scoring, badges, tiers)
+- **Data:** Solana RPC (mainnet), Helius Enhanced API (parsed tx history), CoinGecko/Jupiter (SOL price), Jupiter Token List
+- **Database:** PostgreSQL (DigitalOcean managed) with SQLite fallback for local dev
 - **Monitoring:** Sentry (error tracking), built-in analytics
 - **Deploy:** Docker multi-stage build, DigitalOcean App Platform
 
@@ -53,6 +60,8 @@ cd solana-roast-bot
 # Backend
 pip install -r backend/requirements.txt
 export ANTHROPIC_API_KEY="your-key-here"
+export FAIRSCALE_API_KEY="your-fairscale-key"  # optional, enables reputation features
+export HELIUS_API_KEY="your-helius-key"  # optional, enables enhanced tx history
 uvicorn backend.main:app --host 0.0.0.0 --port 8080 --reload
 
 # Frontend (separate terminal)
@@ -79,6 +88,42 @@ docker run -p 8080:8080 -e ANTHROPIC_API_KEY="..." solana-roast-bot
 | `GET` | `/api/stats` | Global stats |
 | `GET` | `/api/recent` | Recent roasts |
 | `GET` | `/api/history` | Cached roast history |
+| `GET` | `/api/fairscore/{wallet}` | FairScale reputation score |
+| `GET` | `/api/reputation-leaderboard` | Top wallets by degen × reputation |
+| `POST` | `/api/battle` | Head-to-head wallet battle |
+
+## FairScale Integration
+
+Solana Roast Bot integrates [FairScale](https://fairscale.xyz) reputation infrastructure to add an on-chain trust dimension to wallet roasts.
+
+### What FairScale Adds
+
+- **FairScore Card** — Displays reputation score, tier (Platinum/Gold/Silver/Bronze), base score and social score breakdown
+- **Trust vs Degen Radar** — 6-axis radar chart comparing degen metrics (swap frequency, fail rate, shitcoin ratio) against trust metrics (FairScore, social score, wallet age)
+- **Reputation-Aware Roasts** — AI roasts reference the wallet's reputation: "trusted degen", "anonymous ape", "respectable builder", or "ghost"
+- **FairScale Badges** — Diamond Hands, DAO Voter, Long-term Holder, etc. displayed alongside roast achievement badges
+- **Reputation Leaderboard** — "Most Trusted Degens" ranked by combined degen_score × fairscore
+- **Battle Comparisons** — Roast battles include reputation tier comparison
+
+### Architecture
+
+```
+User → POST /api/roast → [Wallet Analysis + FairScale API (parallel)]
+                         → AI Roast (with reputation context)
+                         → Response (roast + degen score + fairscale data)
+```
+
+FairScale data is cached (1h TTL) in PostgreSQL and in-memory. The app degrades gracefully — if FairScale is unavailable or no API key is configured, reputation sections simply don't appear.
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Yes | Claude Haiku for roast generation |
+| `SOLANA_RPC_URL` | Yes | Solana mainnet RPC |
+| `FAIRSCALE_API_KEY` | No | FairScale reputation API (enables trust features) |
+| `HELIUS_API_KEY` | No | Helius Enhanced API (richer tx history) |
+| `DATABASE_URL` | No | PostgreSQL connection (falls back to SQLite) |
 
 ## 🤖 Built Autonomously by an AI Agent
 
