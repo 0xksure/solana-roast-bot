@@ -22,6 +22,9 @@ _token_cache: dict[str, dict] = {}
 _token_cache_ts: float = 0
 TOKEN_CACHE_TTL = 6 * 3600  # 6 hours
 
+MAX_HELIUS_PAGES = int(os.environ.get("MAX_HELIUS_PAGES", "50"))
+MAX_RPC_SIG_PAGES = int(os.environ.get("MAX_RPC_SIG_PAGES", "20"))
+
 KNOWN_PROGRAMS = {
     "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4": "Jupiter",
     "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB": "Jupiter V4",
@@ -42,6 +45,24 @@ KNOWN_PROGRAMS = {
     "11111111111111111111111111111111": "System",
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA": "Token Program",
     "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL": "Associated Token",
+    # DeFi
+    "DRiFTiKWQGEhGJMFB9gNbFLo9LkB4W8UT1VeR5bHBygh": "Drift",
+    "MEisE1HzehtrDpAAT8PnLHjpSSkRYakotTuJRPjTpo8": "Meteora",
+    "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P": "Pump.fun",
+    "moonshineXmXLn2GKnFNRRRXHWJmFNBQYeVzGJEXHF3": "Moonshot",
+    "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX": "Serum V3",
+    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo": "Meteora DLMM",
+    "StakesGhostwLxaVDuWmMdBQPEE9K3sNjHqRVpAfaz": "Stakenet",
+    "jdswHyVGU9qmvSZqczSk6gCkJQPALmFLND5aTj7QjDu": "Jito",
+    # NFT
+    "CJsLwbP1iu5DuUikMin8LH9xfIRST3k45wfnwCSR1Gp": "Tensor cNFT",
+    "hadeK9DLv9eA7ya5KCTqSvSvRZeJC3JgD5a9Y3CNbvu": "Hadeswap",
+    # Governance
+    "GovER5Lthms3bLBqWub97yVRqDfY73swg5bUCAGR12a": "Governance",
+    "AutoSPBP5JYLNgFiNELqL88vHsqZBob77qBUWBEL5zn": "Autocrat/Futarchy",
+    # Infrastructure
+    "ComputeBudget111111111111111111111111111111": "Compute Budget",
+    "AddressLookupTab1e1111111111111111111111111": "Address Lookup",
 }
 
 # Monthly average SOL prices (USD) — historical data
@@ -155,7 +176,7 @@ async def _get_sol_price(client: httpx.AsyncClient) -> float:
     return 0.0
 
 
-async def _get_signatures(client: httpx.AsyncClient, wallet: str, limit: int = 1000, max_pages: int = 5) -> list:
+async def _get_signatures(client: httpx.AsyncClient, wallet: str, limit: int = 1000, max_pages: int = MAX_RPC_SIG_PAGES) -> list:
     """Fetch transaction signatures with pagination for deeper history."""
     all_sigs = []
     before = None
@@ -173,7 +194,7 @@ async def _get_signatures(client: httpx.AsyncClient, wallet: str, limit: int = 1
     return all_sigs
 
 
-async def _get_helius_history(client: httpx.AsyncClient, wallet: str, max_pages: int = 5) -> list:
+async def _get_helius_history(client: httpx.AsyncClient, wallet: str, max_pages: int = MAX_HELIUS_PAGES) -> list:
     """Fetch full parsed transaction history from Helius Enhanced API."""
     if not HELIUS_API_KEY:
         return []
@@ -182,14 +203,18 @@ async def _get_helius_history(client: httpx.AsyncClient, wallet: str, max_pages:
     before_sig = ""
     url = f"{HELIUS_BASE}/addresses/{wallet}/transactions?api-key={HELIUS_API_KEY}"
     
-    for _ in range(max_pages):
+    for page in range(max_pages):
         try:
             page_url = url
             if before_sig:
                 page_url += f"&before={before_sig}"
-            resp = await client.get(page_url, timeout=15)
+            resp = await client.get(page_url, timeout=20)
+            if resp.status_code == 429:
+                print(f"⚠️ Helius rate limited at page {page}, waiting 2s...")
+                await asyncio.sleep(2)
+                resp = await client.get(page_url, timeout=20)
             if resp.status_code != 200:
-                print(f"⚠️ Helius API returned {resp.status_code}")
+                print(f"⚠️ Helius API returned {resp.status_code} at page {page}")
                 break
             txns = resp.json()
             if not txns:
@@ -198,8 +223,9 @@ async def _get_helius_history(client: httpx.AsyncClient, wallet: str, max_pages:
             before_sig = txns[-1].get("signature", "")
             if len(txns) < 100:  # Last page
                 break
+            await asyncio.sleep(0.1)  # Rate limit: 100ms between pages
         except Exception as e:
-            print(f"⚠️ Helius fetch error: {e}")
+            print(f"⚠️ Helius fetch error at page {page}: {e}")
             break
     
     return all_txns
@@ -238,11 +264,12 @@ def _analyze_helius_txns(txns: list) -> dict:
         elif tx_type in ("NFT_SALE", "NFT_MINT", "NFT_LISTING", "NFT_BID"):
             nft_count += 1
         
-        # Track programs
+        # Track programs (map to readable names)
         for inst in tx.get("instructions", []):
             pid = inst.get("programId", "")
             if pid:
-                programs[pid] += 1
+                name = KNOWN_PROGRAMS.get(pid, pid[:12] + "..." if len(pid) > 12 else pid)
+                programs[name] += 1
         
         # Track native SOL transfers
         for nt in tx.get("nativeTransfers", []):
@@ -1050,23 +1077,43 @@ def _build_protocol_stats_helius(txns: list) -> list:
     """Build protocol stats from Helius enhanced transactions."""
     protocol_counts: dict[str, int] = defaultdict(int)
     
+    # Map Helius source to readable names
+    name_map = {
+        "JUPITER": "Jupiter", "RAYDIUM": "Raydium", "ORCA": "Orca",
+        "MARINADE": "Marinade", "MARGINFI": "Marginfi", "TENSOR": "Tensor",
+        "MAGIC_EDEN": "Magic Eden", "PHANTOM": "Phantom", "METEORA": "Meteora",
+        "SOLEND": "Solend", "DRIFT": "Drift", "OPENBOOK": "OpenBook",
+        "PUMP_FUN": "Pump.fun", "MOONSHOT": "Moonshot", "HADESWAP": "Hadeswap",
+        "PHOENIX": "Phoenix", "MERCURIAL": "Mercurial", "SERUM": "Serum",
+        "JITO": "Jito", "STAKENET": "Stakenet",
+    }
+    
     for tx in txns:
         source = tx.get("source", "UNKNOWN")
-        tx_type = tx.get("type", "UNKNOWN")
+        seen_in_tx: set[str] = set()
         
-        # Map Helius source to readable names
-        name_map = {
-            "JUPITER": "Jupiter", "RAYDIUM": "Raydium", "ORCA": "Orca",
-            "MARINADE": "Marinade", "MARGINFI": "Marginfi", "TENSOR": "Tensor",
-            "MAGIC_EDEN": "Magic Eden", "PHANTOM": "Phantom", "METEORA": "Meteora",
-            "SOLEND": "Solend", "DRIFT": "Drift", "OPENBOOK": "OpenBook",
-            "PUMP_FUN": "Pump.fun", "MOONSHOT": "Moonshot",
-        }
         name = name_map.get(source)
         if name:
-            protocol_counts[name] += 1
+            seen_in_tx.add(name)
         elif source not in ("SYSTEM_PROGRAM", "UNKNOWN", ""):
-            protocol_counts[source.replace("_", " ").title()] += 1
+            seen_in_tx.add(source.replace("_", " ").title())
+        
+        # Also check instructions for program IDs → cross-reference KNOWN_PROGRAMS
+        for inst in tx.get("instructions", []):
+            pid = inst.get("programId", "")
+            prog_name = KNOWN_PROGRAMS.get(pid)
+            if prog_name and prog_name not in ("System", "Token Program", "Associated Token", "Compute Budget"):
+                seen_in_tx.add(prog_name)
+        
+        # Check accountData for additional program interactions
+        for acc in tx.get("accountData", []):
+            pid = acc.get("account", "")
+            prog_name = KNOWN_PROGRAMS.get(pid)
+            if prog_name and prog_name not in ("System", "Token Program", "Associated Token", "Compute Budget"):
+                seen_in_tx.add(prog_name)
+        
+        for n in seen_in_tx:
+            protocol_counts[n] += 1
     
     total = sum(protocol_counts.values())
     return [
@@ -1183,12 +1230,16 @@ async def analyze_wallet(wallet: str) -> dict:
         helius_analysis = None
         if HELIUS_API_KEY:
             try:
+                helius_start = time.time()
                 helius_txns = await asyncio.wait_for(
-                    _get_helius_history(client, wallet, max_pages=5), timeout=20
+                    _get_helius_history(client, wallet), timeout=60
                 )
+                helius_elapsed = time.time() - helius_start
                 if helius_txns:
                     helius_analysis = _analyze_helius_txns(helius_txns)
-                    print(f"✅ Helius: {len(helius_txns)} txns, {helius_analysis['swap_count']} swaps")
+                    print(f"✅ Helius: fetched {len(helius_txns)} txns in {helius_elapsed:.1f}s, {helius_analysis['swap_count']} swaps")
+                else:
+                    print(f"ℹ️ Helius: 0 txns returned in {helius_elapsed:.1f}s")
             except Exception as e:
                 print(f"⚠️ Helius failed, falling back to RPC: {e}")
 
