@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import html
 import json
+import logging
 import os
 import re
 import time
@@ -13,6 +14,11 @@ from pathlib import Path
 
 import httpx
 import sentry_sdk
+
+from backend.roaster.logging_config import setup_logging
+
+setup_logging()
+logger = logging.getLogger(__name__)
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 
@@ -64,7 +70,7 @@ def startup():
         run_migrations()
         db.init_db()  # SQLite fallback for local dev
     except Exception as e:
-        print(f"⚠️ DB init failed (will retry on first query): {e}")
+        logger.warning("DB init failed (will retry on first query): %s", e)
 
 # CORS
 app.add_middleware(
@@ -73,6 +79,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    duration = round(time.time() - start, 3)
+    if not request.url.path.startswith("/static") and not request.url.path.startswith("/assets"):
+        logger.info("request | %s %s | %s | %.3fs", request.method, request.url.path, response.status_code, duration)
+    return response
+
 
 # --- Config ---
 CACHE_TTL = 3600
@@ -248,8 +264,7 @@ async def api_roast(req: RoastRequest, request: Request):
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Roast timed out — this wallet is too complex even for us 🕐")
     except Exception as e:
-        traceback.print_exc()
-        print(f"❌ Roast failed for {wallet}: {e}")
+        logger.error("Roast failed for %s...%s: %s", wallet[:8], wallet[-4:], e, exc_info=True)
         sentry_sdk.capture_exception(e)
         sentry_sdk.set_context("wallet", {"address": wallet})
         raise HTTPException(status_code=500, detail=_funny_error())
@@ -379,7 +394,7 @@ async def api_battle(req: BattleRequest, request: Request):
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Battle timed out — these wallets are too complex 🕐")
     except Exception as e:
-        traceback.print_exc()
+        logger.error("Battle failed: %s", e, exc_info=True)
         sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=500, detail=_funny_error())
 

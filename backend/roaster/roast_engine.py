@@ -1,9 +1,12 @@
 """LLM-powered roast generator using Anthropic API."""
 
 import json
+import logging
 import os
 
 import anthropic
+
+logger = logging.getLogger(__name__)
 
 MODEL = "claude-3-5-haiku-20241022"
 
@@ -179,14 +182,20 @@ async def generate_roast(analysis: dict, fairscale_data: dict | None = None) -> 
     )
 
     text = message.content[0].text.strip()
+    logger.debug("LLM response length: %d chars", len(text))
 
     if text.startswith("```"):
         text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
 
-    roast = json.loads(text)
+    try:
+        roast = json.loads(text)
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse LLM roast response: %s", e)
+        raise
 
     required = {"title", "roast_lines", "degen_score", "score_explanation", "summary"}
     if not required.issubset(roast.keys()):
+        logger.error("Missing keys in roast response: %s", required - roast.keys())
         raise ValueError(f"Missing keys: {required - roast.keys()}")
 
     roast["wallet_stats"] = {

@@ -1,6 +1,7 @@
 """Wallet analyzer — fetches on-chain data for a Solana wallet."""
 
 import asyncio
+import logging
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -9,6 +10,8 @@ from typing import Any
 import os
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 SOLANA_RPC = "https://api.mainnet-beta.solana.com"
 SOL_MINT = "So11111111111111111111111111111111111111112"
@@ -210,11 +213,11 @@ async def _get_helius_history(client: httpx.AsyncClient, wallet: str, max_pages:
                 page_url += f"&before={before_sig}"
             resp = await client.get(page_url, timeout=20)
             if resp.status_code == 429:
-                print(f"⚠️ Helius rate limited at page {page}, waiting 2s...")
+                logger.warning("Helius rate limited at page %d, waiting 2s", page)
                 await asyncio.sleep(2)
                 resp = await client.get(page_url, timeout=20)
             if resp.status_code != 200:
-                print(f"⚠️ Helius API returned {resp.status_code} at page {page}")
+                logger.warning("Helius API returned %d at page %d", resp.status_code, page)
                 break
             txns = resp.json()
             if not txns:
@@ -225,7 +228,7 @@ async def _get_helius_history(client: httpx.AsyncClient, wallet: str, max_pages:
                 break
             await asyncio.sleep(0.1)  # Rate limit: 100ms between pages
         except Exception as e:
-            print(f"⚠️ Helius fetch error at page {page}: {e}")
+            logger.error("Helius fetch error at page %d: %s", page, e)
             break
     
     return all_txns
@@ -1237,11 +1240,11 @@ async def analyze_wallet(wallet: str) -> dict:
                 helius_elapsed = time.time() - helius_start
                 if helius_txns:
                     helius_analysis = _analyze_helius_txns(helius_txns)
-                    print(f"✅ Helius: fetched {len(helius_txns)} txns in {helius_elapsed:.1f}s, {helius_analysis['swap_count']} swaps")
+                    logger.info("Helius: fetched %d txns in %.1fs, %d swaps", len(helius_txns), helius_elapsed, helius_analysis["swap_count"])
                 else:
-                    print(f"ℹ️ Helius: 0 txns returned in {helius_elapsed:.1f}s")
+                    logger.debug("Helius: 0 txns returned in %.1fs", helius_elapsed)
             except Exception as e:
-                print(f"⚠️ Helius failed, falling back to RPC: {e}")
+                logger.warning("Helius failed, falling back to RPC: %s", e)
 
         # Fallback: sample transactions from RPC
         txn_analysis = {"programs_used": {}, "swap_count": 0, "nft_activity": 0}
