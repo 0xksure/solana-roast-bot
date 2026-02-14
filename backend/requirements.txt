@@ -8,3 +8,4 @@ pytest==8.3.3
 pytest-asyncio==0.24.0
 psycopg2-binary
 yoyo-migrations
+python-telegram-bot==21.6

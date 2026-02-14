@@ -46,6 +46,9 @@ from backend.roaster.wallet_analyzer import analyze_wallet
 from backend.roaster import db
 from backend.roaster import fairscale
 
+# ── Telegram Bot ──
+TELEGRAM_BOT_TOKEN = os.environ.get("ROAST_TELEGRAM_BOT_TOKEN", "")
+
 # ── Self-hosted analytics ──
 ANALYTICS_URL = os.environ.get("ANALYTICS_URL", "https://solana-narrative-radar-8vsib.ondigitalocean.app/api/analytics/event")
 
@@ -64,13 +67,24 @@ async def track_event(event: str, properties: dict = None):
 app = FastAPI(title="Solana Roast Bot")
 
 @app.on_event("startup")
-def startup():
+async def startup():
     try:
         from backend.migrate import run_migrations
         run_migrations()
         db.init_db()  # SQLite fallback for local dev
     except Exception as e:
         logger.warning("DB init failed (will retry on first query): %s", e)
+
+    # Initialize Telegram bot if token is set
+    if TELEGRAM_BOT_TOKEN:
+        try:
+            from backend.telegram_bot import get_application, set_bot_commands
+            tg_app = get_application()
+            await tg_app.initialize()
+            await set_bot_commands()
+            logger.info("Telegram bot initialized")
+        except Exception as e:
+            logger.warning("Telegram bot init failed: %s", e)
 
 # CORS
 app.add_middleware(
@@ -493,6 +507,36 @@ async def api_fairscore(wallet: str):
         "badges": data.get("badges", []),
         "features": data.get("features", {}),
     }
+
+
+# ── Telegram Webhook ──
+
+@app.post("/api/telegram/webhook")
+async def telegram_webhook(request: Request):
+    """Receive Telegram updates via webhook."""
+    if not TELEGRAM_BOT_TOKEN:
+        raise HTTPException(status_code=503, detail="Telegram bot not configured")
+    from backend.telegram_bot import get_application
+    from telegram import Update as TGUpdate
+    tg_app = get_application()
+    data = await request.json()
+    update = TGUpdate.de_json(data, tg_app.bot)
+    await tg_app.process_update(update)
+    return {"ok": True}
+
+
+@app.post("/api/telegram/setup-webhook")
+async def telegram_setup_webhook(request: Request):
+    """Set up the Telegram webhook. POST with {"url": "https://your-domain.com/api/telegram/webhook"}"""
+    if not TELEGRAM_BOT_TOKEN:
+        raise HTTPException(status_code=503, detail="Telegram bot not configured")
+    body = await request.json()
+    webhook_url = body.get("url")
+    if not webhook_url:
+        raise HTTPException(status_code=400, detail="Missing 'url' in request body")
+    from backend.telegram_bot import setup_webhook
+    await setup_webhook(webhook_url)
+    return {"ok": True, "webhook_url": webhook_url}
 
 
 @app.get("/api/reputation-leaderboard")
