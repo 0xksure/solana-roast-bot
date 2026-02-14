@@ -94,26 +94,98 @@ docker run -p 8080:8080 -e ANTHROPIC_API_KEY="..." solana-roast-bot
 
 ## FairScale Integration
 
-Solana Roast Bot integrates [FairScale](https://fairscale.xyz) reputation infrastructure to add an on-chain trust dimension to wallet roasts.
+Solana Roast Bot integrates [FairScale](https://fairscale.xyz) reputation infrastructure to add an on-chain trust dimension to wallet roasts. This was built for the **FairScale Fairathon** bounty.
 
 ### What FairScale Adds
 
-- **FairScore Card** — Displays reputation score, tier (Platinum/Gold/Silver/Bronze), base score and social score breakdown
-- **Trust vs Degen Radar** — 6-axis radar chart comparing degen metrics (swap frequency, fail rate, shitcoin ratio) against trust metrics (FairScore, social score, wallet age)
-- **Reputation-Aware Roasts** — AI roasts reference the wallet's reputation: "trusted degen", "anonymous ape", "respectable builder", or "ghost"
-- **FairScale Badges** — Diamond Hands, DAO Voter, Long-term Holder, etc. displayed alongside roast achievement badges
-- **Reputation Leaderboard** — "Most Trusted Degens" ranked by combined degen_score × fairscore
-- **Battle Comparisons** — Roast battles include reputation tier comparison
+- **FairScore Card** (`FairScoreCard.jsx`) — Animated reputation score display with tier badge (Platinum/Gold/Silver/Bronze), base score, social score, wallet age, and active days breakdown. Includes a "persona" label based on trust×degen quadrant.
+- **Trust vs Degen Radar** (`TrustDegenRadar.jsx`) — 6-axis Chart.js radar chart with dual datasets: degen axes (swap frequency, fail rate, shitcoin ratio) in red vs trust axes (FairScore, social score, wallet age) in cyan.
+- **Reputation-Aware Roasts** — The AI roast prompt (`roast_engine.py`) receives FairScale data via `fairscale.format_for_roast()`, producing contextual humor:
+  - High trust + high degen → "Trusted degen — respected by the chain, feared by your portfolio"
+  - Low trust + high degen → "Anonymous ape — no reputation, all risk"
+  - High trust + low degen → "Respectable builder — boring but your mom would be proud"
+  - Low trust + low degen → "Ghost — the chain barely knows you exist"
+- **FairScale Badges** (`FairBadges.jsx`) — Renders reputation badges (Diamond Hands, DAO Voter, Long-term Holder, etc.) with tier-colored styling alongside roast achievement badges.
+- **Reputation Leaderboard** (`ReputationLeaderboard.jsx`) — "Most Trusted Degens" tab ranked by `degen_score × fairscore` combined score. Clickable rows trigger a roast.
+- **Battle Comparisons** — Roast battles include reputation tier in the AI verdict context.
 
 ### Architecture
 
 ```
-User → POST /api/roast → [Wallet Analysis + FairScale API (parallel)]
-                         → AI Roast (with reputation context)
-                         → Response (roast + degen score + fairscale data)
+User → POST /api/roast → [Wallet Analysis + FairScale API (parallel fetch)]
+                         → AI Roast (with reputation context injected)
+                         → Response includes: roast + degen_score + fairscale{}
+
+FairScale flow:
+  fairscale.get_fairscore(wallet)
+    → Check in-memory hot cache (1h TTL)
+    → GET https://api.fairscale.xyz/score?wallet=X  (header: fairkey)
+    → Cache in memory + persist to PostgreSQL fairscale_scores table
+    → Return {fairscore, fairscore_base, social_score, tier, badges[], features{}}
 ```
 
-FairScale data is cached (1h TTL) in PostgreSQL and in-memory. The app degrades gracefully — if FairScale is unavailable or no API key is configured, reputation sections simply don't appear.
+### API Endpoints
+
+| Endpoint | Description | Auth Required |
+|----------|-------------|---------------|
+| `GET /api/fairscore/{wallet}` | Full FairScale reputation profile for a wallet. Returns cached data (1h TTL) or fetches fresh from FairScale API. Returns 503 if API unavailable. | No (public) |
+| `GET /api/reputation-leaderboard` | Top 20 wallets ranked by `degen_score × fairscore`. Requires both a roast and FairScale score to exist. | No (public) |
+
+### FairScale API Response (from `/score`)
+
+```json
+{
+  "wallet": "7xKXtg...",
+  "fairscore_base": 58.1,
+  "social_score": 36.0,
+  "fairscore": 65.3,
+  "tier": "gold",
+  "badges": [
+    { "id": "diamond_hands", "label": "Diamond Hands", "description": "Long-term holder", "tier": "platinum" }
+  ],
+  "features": {
+    "lst_percentile_score": 0.75,
+    "major_percentile_score": 0.82,
+    "native_sol_percentile": 0.68,
+    "tx_count": 1250,
+    "active_days": 180,
+    "wallet_age_days": 365
+  }
+}
+```
+
+### Database Schema
+
+```sql
+CREATE TABLE fairscale_scores (
+    wallet TEXT PRIMARY KEY,
+    fairscore DOUBLE PRECISION,
+    fairscore_base DOUBLE PRECISION,
+    social_score DOUBLE PRECISION,
+    tier TEXT,
+    badges TEXT,          -- JSON array
+    features TEXT,        -- JSON object
+    fetched_at DOUBLE PRECISION NOT NULL
+);
+```
+
+### Graceful Degradation
+
+The app works fully without FairScale — reputation features are additive, never blocking:
+
+1. **No `FAIRSCALE_API_KEY` env var** → All FairScale UI sections hidden. `fairscale.py` returns `None` immediately. No API calls made.
+2. **FairScale API returns 429/500** → Returns stale cache if available, `None` otherwise. Roast generation continues without reputation context.
+3. **FairScale API timeout (10s)** → Same as above. The roast endpoint has a 30s overall timeout; FairScale is fetched in parallel and doesn't block wallet analysis.
+4. **Frontend** → `{roast.fairscale && <FairScoreCard />}` — components only render when data exists.
+
+### Frontend Components
+
+| Component | File | Props | Description |
+|-----------|------|-------|-------------|
+| `FairScoreCard` | `FairScoreCard.jsx` | `fairscale, degenScore` | Animated score counter, tier badge, stat breakdown, persona label |
+| `TrustDegenRadar` | `TrustDegenRadar.jsx` | `fairscale, walletStats` | 6-axis radar chart (Chart.js) |
+| `FairBadges` | `FairBadges.jsx` | `badges` | Reputation badge list with tier coloring |
+| `ReputationLeaderboard` | `ReputationLeaderboard.jsx` | `visible, onRoast` | Leaderboard tab, fetches from `/api/reputation-leaderboard` |
 
 ### Environment Variables
 
@@ -121,9 +193,9 @@ FairScale data is cached (1h TTL) in PostgreSQL and in-memory. The app degrades 
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | Yes | Claude Haiku for roast generation |
 | `SOLANA_RPC_URL` | Yes | Solana mainnet RPC |
-| `FAIRSCALE_API_KEY` | No | FairScale reputation API (enables trust features) |
-| `HELIUS_API_KEY` | No | Helius Enhanced API (richer tx history) |
-| `DATABASE_URL` | No | PostgreSQL connection (falls back to SQLite) |
+| `FAIRSCALE_API_KEY` | No | FairScale reputation API key (get from [sales.fairscale.xyz](https://sales.fairscale.xyz)). Enables all trust/reputation features when set. |
+| `HELIUS_API_KEY` | No | Helius Enhanced API (richer tx history, better chart accuracy) |
+| `DATABASE_URL` | No | PostgreSQL connection string (falls back to SQLite for local dev) |
 
 ## 🤖 Built Autonomously by an AI Agent
 
