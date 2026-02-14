@@ -1,6 +1,7 @@
 """Solana Roast Bot — FastAPI backend."""
 
 import asyncio
+import hashlib
 import html
 import json
 import os
@@ -10,6 +11,7 @@ import traceback
 from collections import defaultdict
 from pathlib import Path
 
+import httpx
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
@@ -37,6 +39,21 @@ from backend.roaster.roast_engine import generate_roast
 from backend.roaster.wallet_analyzer import analyze_wallet
 from backend.roaster import db
 from backend.roaster import fairscale
+
+# ── Self-hosted analytics ──
+ANALYTICS_URL = os.environ.get("ANALYTICS_URL", "https://solana-narrative-radar-8vsib.ondigitalocean.app/api/analytics/event")
+
+async def track_event(event: str, properties: dict = None):
+    """Send analytics event to self-hosted store. Never blocks main flow."""
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(ANALYTICS_URL, json={
+                "app": "roast-bot",
+                "event": event,
+                "properties": properties or {},
+            }, timeout=5)
+    except Exception:
+        pass
 
 app = FastAPI(title="Solana Roast Bot")
 
@@ -256,6 +273,11 @@ async def api_roast(req: RoastRequest, request: Request):
     _set_cache(wallet, roast)
     _record_rate_limit(ip, wallet)
 
+    # Track analytics
+    wallet_hash = hashlib.sha256(wallet.encode()).hexdigest()[:12]
+    asyncio.create_task(track_event("Wallet Submitted", {"wallet_hash": wallet_hash}))
+    asyncio.create_task(track_event("Roast Generated", {"wallet_hash": wallet_hash, "degen_score": score}))
+
     # Persist to DB
     db.save_roast(wallet, roast)
 
@@ -366,6 +388,11 @@ async def api_battle(req: BattleRequest, request: Request):
 
     battle_summary = await _generate_battle_verdict(roast1, roast2, wallet1, wallet2)
 
+    asyncio.create_task(track_event("Battle Started", {
+        "wallet1_hash": hashlib.sha256(wallet1.encode()).hexdigest()[:12],
+        "wallet2_hash": hashlib.sha256(wallet2.encode()).hexdigest()[:12],
+    }))
+
     return {
         "wallet1": wallet1,
         "wallet2": wallet2,
@@ -402,6 +429,7 @@ async def api_stats():
 
 @app.get("/api/leaderboard")
 async def api_leaderboard():
+    asyncio.create_task(track_event("Leaderboard Viewed"))
     return db.get_leaderboard(20)
 
 
