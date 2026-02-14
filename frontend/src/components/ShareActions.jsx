@@ -11,7 +11,7 @@ export default function ShareActions({ roast, wallet, onReset }) {
   const shareTwitter = () => {
     mp('share_twitter', { degen_score: roast?.degen_score });
     const tierStr = roast?.fairscale?.tier ? ` | ${roast.fairscale.tier.toUpperCase()} tier` : '';
-    const text = `My Solana wallet got roasted 🔥\n\n"${roast.title}" — ${roast.degen_score}/100 degen score${tierStr}\n\n"${shortLine}"\n\nGet roasted:`;
+    const text = `My Solana wallet got roasted 🔥\n\n"${roast.title}" — ${roast.degen_score}/100 degen score${tierStr}\n\n"${shortLine}"\n\n#SolanaRoast #Solana\n\nGet roasted:`;
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
   };
 

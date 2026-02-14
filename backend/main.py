@@ -520,6 +520,12 @@ def _og_html(wallet: str, roast: dict, base_url: str = "") -> str:
 </html>"""
 
 
+@app.get("/api/roast/{wallet}/og")
+async def api_roast_og_image(wallet: str):
+    """Alias for the share card image (OG image for Twitter/social previews)."""
+    return await api_roast_image(wallet)
+
+
 @app.get("/api/roast/{wallet}", response_class=HTMLResponse)
 async def api_roast_page(wallet: str, request: Request):
     wallet = _validate_wallet(wallet)
