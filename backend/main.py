@@ -42,7 +42,10 @@ app = FastAPI(title="Solana Roast Bot")
 
 @app.on_event("startup")
 def startup():
-    db.init_db()
+    try:
+        db.init_db()
+    except Exception as e:
+        print(f"⚠️ DB init failed (will retry on first query): {e}")
 
 # CORS
 app.add_middleware(
