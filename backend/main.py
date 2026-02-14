@@ -36,6 +36,7 @@ from backend.roaster.card_generator import generate_card
 from backend.roaster.roast_engine import generate_roast
 from backend.roaster.wallet_analyzer import analyze_wallet
 from backend.roaster import db
+from backend.roaster import fairscale
 
 app = FastAPI(title="Solana Roast Bot")
 
@@ -209,9 +210,19 @@ async def api_roast(req: RoastRequest, request: Request):
         # Check DB cache for analysis (saves RPC calls)
         analysis = db.get_cached_analysis(wallet)
         if not analysis:
-            analysis = await asyncio.wait_for(analyze_wallet(wallet), timeout=ROAST_TIMEOUT)
+            # Fetch wallet analysis and FairScale score in parallel
+            analysis_task = asyncio.wait_for(analyze_wallet(wallet), timeout=ROAST_TIMEOUT)
+            fairscale_task = fairscale.get_fairscore(wallet)
+            analysis, fairscale_data = await asyncio.gather(analysis_task, fairscale_task)
             db.save_analysis(wallet, analysis)
-        roast = await asyncio.wait_for(generate_roast(analysis), timeout=ROAST_TIMEOUT)
+        else:
+            fairscale_data = await fairscale.get_fairscore(wallet)
+
+        # Persist FairScale data
+        if fairscale_data:
+            db.save_fairscale_score(wallet, fairscale_data)
+
+        roast = await asyncio.wait_for(generate_roast(analysis, fairscale_data=fairscale_data), timeout=ROAST_TIMEOUT)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Roast timed out — this wallet is too complex even for us 🕐")
     except Exception as e:
@@ -225,6 +236,17 @@ async def api_roast(req: RoastRequest, request: Request):
     score = roast.get("degen_score", 0)
     roast["percentile"] = db.get_percentile(score)
     roast["achievements"] = _compute_achievements(roast, analysis)
+
+    # Add FairScale reputation data to response
+    if fairscale_data:
+        roast["fairscale"] = {
+            "fairscore": fairscale_data.get("fairscore"),
+            "fairscore_base": fairscale_data.get("fairscore_base"),
+            "social_score": fairscale_data.get("social_score"),
+            "tier": fairscale_data.get("tier"),
+            "badges": fairscale_data.get("badges", []),
+            "features": fairscale_data.get("features", {}),
+        }
 
     _set_cache(wallet, roast)
     _record_rate_limit(ip, wallet)
@@ -387,6 +409,35 @@ async def api_recent():
 async def api_roast_history(wallet: str):
     wallet = _validate_wallet(wallet)
     return db.get_roast_history(wallet)
+
+
+@app.get("/api/fairscore/{wallet}")
+async def api_fairscore(wallet: str):
+    """Get FairScale reputation score for a wallet."""
+    wallet = _validate_wallet(wallet)
+    # Check DB cache first
+    cached = db.get_fairscale_score(wallet)
+    if cached and time.time() - cached.get("fetched_at", 0) < 3600:
+        return cached
+    # Fetch fresh
+    data = await fairscale.get_fairscore(wallet)
+    if not data:
+        raise HTTPException(status_code=503, detail="FairScale reputation data unavailable")
+    db.save_fairscale_score(wallet, data)
+    return {
+        "fairscore": data.get("fairscore"),
+        "fairscore_base": data.get("fairscore_base"),
+        "social_score": data.get("social_score"),
+        "tier": data.get("tier"),
+        "badges": data.get("badges", []),
+        "features": data.get("features", {}),
+    }
+
+
+@app.get("/api/reputation-leaderboard")
+async def api_reputation_leaderboard():
+    """Top wallets by combined degen × reputation score."""
+    return db.get_reputation_leaderboard(20)
 
 
 def _og_html(wallet: str, roast: dict, base_url: str = "") -> str:

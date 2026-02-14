@@ -156,7 +156,7 @@ def _build_prompt(analysis: dict) -> str:
     return "\n".join(lines)
 
 
-async def generate_roast(analysis: dict) -> dict:
+async def generate_roast(analysis: dict, fairscale_data: dict | None = None) -> dict:
     """Generate a roast from wallet analysis. Returns roast dict."""
     raw_key = os.environ.get("ANTHROPIC_API_KEY", "")
     api_key = "".join(raw_key.split())
@@ -165,6 +165,11 @@ async def generate_roast(analysis: dict) -> dict:
     client = anthropic.AsyncAnthropic(api_key=api_key)
 
     prompt = _build_prompt(analysis)
+
+    # Append FairScale reputation data if available
+    if fairscale_data:
+        from backend.roaster.fairscale import format_for_roast
+        prompt += "\n" + format_for_roast(fairscale_data)
 
     message = await client.messages.create(
         model=MODEL,

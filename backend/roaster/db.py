@@ -42,6 +42,18 @@ if DATABASE_URL:
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_roasts_created ON roasts(created_at DESC);
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS fairscale_scores (
+                wallet TEXT PRIMARY KEY,
+                fairscore DOUBLE PRECISION,
+                fairscore_base DOUBLE PRECISION,
+                social_score DOUBLE PRECISION,
+                tier TEXT,
+                badges TEXT,
+                features TEXT,
+                fetched_at DOUBLE PRECISION NOT NULL
+            );
+        """)
         conn.commit()
         conn.close()
 
@@ -154,6 +166,58 @@ if DATABASE_URL:
         conn.close()
         return round((below / total) * 100, 1)
 
+    def save_fairscale_score(wallet: str, data: dict):
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO fairscale_scores (wallet, fairscore, fairscore_base, social_score, tier, badges, features, fetched_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT(wallet) DO UPDATE SET
+                fairscore=%s, fairscore_base=%s, social_score=%s, tier=%s, badges=%s, features=%s, fetched_at=%s
+        """, (
+            wallet, data.get("fairscore"), data.get("fairscore_base"), data.get("social_score"),
+            data.get("tier"), json.dumps(data.get("badges", [])), json.dumps(data.get("features", {})), time.time(),
+            data.get("fairscore"), data.get("fairscore_base"), data.get("social_score"),
+            data.get("tier"), json.dumps(data.get("badges", [])), json.dumps(data.get("features", {})), time.time(),
+        ))
+        conn.commit()
+        conn.close()
+
+    def get_fairscale_score(wallet: str) -> dict | None:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT fairscore, fairscore_base, social_score, tier, badges, features, fetched_at FROM fairscale_scores WHERE wallet = %s", (wallet,))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return None
+        return {
+            "fairscore": row[0], "fairscore_base": row[1], "social_score": row[2],
+            "tier": row[3], "badges": json.loads(row[4] or "[]"), "features": json.loads(row[5] or "{}"),
+            "fetched_at": row[6],
+        }
+
+    def get_reputation_leaderboard(limit: int = 20) -> list:
+        """Top wallets by combined degen_score * fairscore."""
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT r.wallet,
+                   (r.roast_json::json->>'degen_score')::float as degen,
+                   f.fairscore, f.tier,
+                   (r.roast_json::json->>'degen_score')::float * COALESCE(f.fairscore, 0) as combined
+            FROM roasts r
+            JOIN fairscale_scores f ON r.wallet = f.wallet
+            WHERE f.fairscore IS NOT NULL
+            ORDER BY combined DESC
+            LIMIT %s
+        """, (limit,))
+        rows = cur.fetchall()
+        conn.close()
+        return [{
+            "wallet": r[0], "degen_score": r[1], "fairscore": r[2], "tier": r[3], "combined": r[4],
+        } for r in rows]
+
 
 # --------------- SQLite (local dev) ---------------
 else:
@@ -185,6 +249,16 @@ else:
             );
             CREATE INDEX IF NOT EXISTS idx_roasts_wallet ON roasts(wallet);
             CREATE INDEX IF NOT EXISTS idx_roasts_created ON roasts(created_at DESC);
+            CREATE TABLE IF NOT EXISTS fairscale_scores (
+                wallet TEXT PRIMARY KEY,
+                fairscore REAL,
+                fairscore_base REAL,
+                social_score REAL,
+                tier TEXT,
+                badges TEXT,
+                features TEXT,
+                fetched_at REAL NOT NULL
+            );
         """)
         conn.close()
 
@@ -284,3 +358,51 @@ else:
         ).fetchone()["c"]
         conn.close()
         return round((below / total) * 100, 1)
+
+    def save_fairscale_score(wallet: str, data: dict):
+        conn = _get_conn()
+        conn.execute("""
+            INSERT INTO fairscale_scores (wallet, fairscore, fairscore_base, social_score, tier, badges, features, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(wallet) DO UPDATE SET
+                fairscore=?, fairscore_base=?, social_score=?, tier=?, badges=?, features=?, fetched_at=?
+        """, (
+            wallet, data.get("fairscore"), data.get("fairscore_base"), data.get("social_score"),
+            data.get("tier"), json.dumps(data.get("badges", [])), json.dumps(data.get("features", {})), time.time(),
+            data.get("fairscore"), data.get("fairscore_base"), data.get("social_score"),
+            data.get("tier"), json.dumps(data.get("badges", [])), json.dumps(data.get("features", {})), time.time(),
+        ))
+        conn.commit()
+        conn.close()
+
+    def get_fairscale_score(wallet: str) -> dict | None:
+        conn = _get_conn()
+        row = conn.execute("SELECT fairscore, fairscore_base, social_score, tier, badges, features, fetched_at FROM fairscale_scores WHERE wallet = ?", (wallet,)).fetchone()
+        conn.close()
+        if not row:
+            return None
+        return {
+            "fairscore": row["fairscore"], "fairscore_base": row["fairscore_base"],
+            "social_score": row["social_score"], "tier": row["tier"],
+            "badges": json.loads(row["badges"] or "[]"), "features": json.loads(row["features"] or "{}"),
+            "fetched_at": row["fetched_at"],
+        }
+
+    def get_reputation_leaderboard(limit: int = 20) -> list:
+        conn = _get_conn()
+        rows = conn.execute("""
+            SELECT r.wallet,
+                   json_extract(r.roast_json, '$.degen_score') as degen,
+                   f.fairscore, f.tier,
+                   json_extract(r.roast_json, '$.degen_score') * COALESCE(f.fairscore, 0) as combined
+            FROM roasts r
+            JOIN fairscale_scores f ON r.wallet = f.wallet
+            WHERE f.fairscore IS NOT NULL
+            ORDER BY combined DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+        conn.close()
+        return [{
+            "wallet": r["wallet"], "degen_score": r["degen"], "fairscore": r["fairscore"],
+            "tier": r["tier"], "combined": r["combined"],
+        } for r in rows]

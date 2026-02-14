@@ -13,6 +13,9 @@ import RecentRoasts from './components/RecentRoasts';
 import Footer from './components/Footer';
 import BattleMode from './components/BattleMode';
 import BattleResult from './components/BattleResult';
+import FairScoreCard from './components/FairScoreCard';
+import TrustDegenRadar from './components/TrustDegenRadar';
+import ReputationLeaderboard from './components/ReputationLeaderboard';
 import { useRoast } from './hooks/useRoast';
 import { useBattle } from './hooks/useBattle';
 
@@ -80,6 +83,12 @@ export default function App() {
             <div className="result-card">
               <RoastResult roast={roast} wallet={wallet} />
               <Achievements achievements={roast.achievements} percentile={roast.percentile} />
+              {roast.fairscale && (
+                <>
+                  <FairScoreCard fairscale={roast.fairscale} degenScore={roast.degen_score} />
+                  <TrustDegenRadar fairscale={roast.fairscale} walletStats={{...roast.wallet_stats, degen_score: roast.degen_score}} />
+                </>
+              )}
               <StatsCards stats={roast.wallet_stats} />
               <WalletAutopsy stats={roast.wallet_stats} />
               <ShareActions roast={roast} wallet={wallet} onReset={handleReset} />
@@ -92,6 +101,7 @@ export default function App() {
         )}
 
         {!isLoading && !hasResult && <Leaderboard visible={!hasResult} onRoast={doRoast} />}
+        {!isLoading && !hasResult && <ReputationLeaderboard visible={!hasResult} onRoast={doRoast} />}
         {!isLoading && !hasResult && <RecentRoasts visible={!hasResult} onRoast={doRoast} />}
         <Footer />
       </div>
