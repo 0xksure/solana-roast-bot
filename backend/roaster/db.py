@@ -13,7 +13,7 @@ if DATABASE_URL:
     import psycopg2.extras
 
     def _get_conn():
-        conn = psycopg2.connect(DATABASE_URL)
+        conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
         conn.autocommit = False
         return conn
 
