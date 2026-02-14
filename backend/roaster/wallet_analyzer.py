@@ -973,11 +973,16 @@ def _build_activity_heatmap(sigs: list) -> dict:
 
 
 def _build_net_worth_timeline_helius(txns: list, wallet: str) -> list:
-    """Build net worth timeline from Helius enhanced transactions."""
-    monthly: dict[str, float] = defaultdict(float)
+    """Build net worth timeline from Helius enhanced transactions.
+    
+    Returns same shape as _build_net_worth_timeline for chart compatibility:
+    [{month, estimated_sol, tx_count, sol_price_usd, estimated_usd}, ...]
+    """
+    monthly_balance: dict[str, float] = {}
+    monthly_tx_count: dict[str, int] = defaultdict(int)
     running = 0.0
     
-    # Sort by timestamp
+    # Sort by timestamp (oldest first)
     sorted_txns = sorted(txns, key=lambda t: t.get("timestamp", 0))
     
     for tx in sorted_txns:
@@ -985,6 +990,7 @@ def _build_net_worth_timeline_helius(txns: list, wallet: str) -> list:
         if not ts:
             continue
         month = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m")
+        monthly_tx_count[month] += 1
         
         # Track SOL flow
         for nt in tx.get("nativeTransfers", []):
@@ -994,9 +1000,50 @@ def _build_net_worth_timeline_helius(txns: list, wallet: str) -> list:
             elif nt.get("fromUserAccount") == wallet:
                 running -= amount_sol
         
-        monthly[month] = running
+        monthly_balance[month] = running
     
-    return [{"month": m, "sol": round(v, 4)} for m, v in sorted(monthly.items())]
+    if not monthly_balance:
+        return []
+    
+    # Build continuous timeline (fill gaps with forward-fill)
+    all_months = sorted(set(list(monthly_balance.keys()) + list(monthly_tx_count.keys())))
+    if not all_months:
+        return []
+    
+    # Extend to current month
+    now = datetime.now(tz=timezone.utc)
+    last_month = f"{now.year:04d}-{now.month:02d}"
+    if last_month > all_months[-1]:
+        all_months.append(last_month)
+    
+    # Fill in missing months between first and last
+    filled_months = []
+    first = all_months[0]
+    last = all_months[-1]
+    y, m = int(first[:4]), int(first[5:7])
+    ly, lm = int(last[:4]), int(last[5:7])
+    while (y, m) <= (ly, lm):
+        filled_months.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    
+    timeline = []
+    last_known = 0.0
+    for month_key in filled_months:
+        if month_key in monthly_balance:
+            last_known = monthly_balance[month_key]
+        sol_price = SOL_PRICE_HISTORY.get(month_key, 0)
+        timeline.append({
+            "month": month_key,
+            "estimated_sol": round(max(last_known, 0), 4),
+            "tx_count": monthly_tx_count.get(month_key, 0),
+            "sol_price_usd": sol_price,
+            "estimated_usd": round(max(last_known, 0) * sol_price, 2),
+        })
+    
+    return timeline
 
 
 def _build_protocol_stats_helius(txns: list) -> list:
@@ -1026,6 +1073,85 @@ def _build_protocol_stats_helius(txns: list) -> list:
         {"name": n, "tx_count": c, "pct": round(c / total * 100, 1) if total > 0 else 0}
         for n, c in sorted(protocol_counts.items(), key=lambda x: -x[1])
     ][:15]
+
+
+def _extract_swaps_from_helius(txns: list, wallet: str) -> list:
+    """Extract swap-like records from Helius enhanced txns for loss/PnL charts."""
+    swaps = []
+    for tx in txns:
+        if tx.get("type") != "SWAP":
+            continue
+        ts = tx.get("timestamp", 0)
+        sol_in = 0.0
+        sol_out = 0.0
+        token_in_symbol = None
+        token_out_symbol = None
+        
+        for transfer in tx.get("tokenTransfers", []):
+            mint = transfer.get("mint", "")
+            amount = transfer.get("tokenAmount", 0)
+            from_acc = transfer.get("fromUserAccount", "")
+            to_acc = transfer.get("toUserAccount", "")
+            
+            if mint == SOL_MINT or mint == "":
+                if from_acc == wallet:
+                    sol_out += amount
+                elif to_acc == wallet:
+                    sol_in += amount
+            else:
+                if from_acc == wallet:
+                    token_in_symbol = mint[:8] + "..."
+                elif to_acc == wallet:
+                    token_out_symbol = mint[:8] + "..."
+        
+        # Also check native transfers for SOL
+        for nt in tx.get("nativeTransfers", []):
+            amount_sol = abs(nt.get("amount", 0)) / 1e9
+            if nt.get("fromUserAccount") == wallet:
+                sol_out += amount_sol
+            elif nt.get("toUserAccount") == wallet:
+                sol_in += amount_sol
+        
+        sol_change = sol_in - sol_out
+        token_in = {"mint": "", "symbol": "SOL", "amount": sol_out} if sol_out > 0.001 else None
+        token_out_rec = {"mint": "", "symbol": "SOL", "amount": sol_in} if sol_in > 0.001 else None
+        
+        # If SOL went out and a token came in → buying token with SOL
+        if sol_out > 0.001 and token_out_symbol:
+            token_in = {"mint": "", "symbol": "SOL", "amount": sol_out}
+            token_out_rec = {"mint": "", "symbol": token_out_symbol, "amount": 0}
+        # If SOL came in and a token went out → selling token for SOL
+        elif sol_in > 0.001 and token_in_symbol:
+            token_in = {"mint": "", "symbol": token_in_symbol, "amount": 0}
+            token_out_rec = {"mint": "", "symbol": "SOL", "amount": sol_in}
+        
+        if token_in or token_out_rec:
+            swaps.append({
+                "timestamp": ts,
+                "token_in": token_in,
+                "token_out": token_out_rec,
+                "sol_change": round(sol_change, 6),
+            })
+    
+    return swaps
+
+
+def _build_activity_heatmap_helius(txns: list) -> dict:
+    """Build activity heatmap from Helius transaction timestamps."""
+    heatmap: dict[str, int] = {}
+    day_names = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+    
+    for tx in txns:
+        ts = tx.get("timestamp")
+        if not ts:
+            continue
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+        day = day_names[dt.weekday()]
+        hour = dt.hour
+        key = f"{day}_{hour}"
+        heatmap[key] = heatmap.get(key, 0) + 1
+    
+    return heatmap
 
 
 async def analyze_wallet(wallet: str) -> dict:
@@ -1123,7 +1249,10 @@ async def analyze_wallet(wallet: str) -> dict:
 
         # Analytics: net worth timeline, protocol stats, loss breakdown, heatmap
         all_swaps = []
-        if sampled_txns and not helius_analysis:
+        if helius_txns:
+            # Extract swap-like records from Helius data for loss charts
+            all_swaps = _extract_swaps_from_helius(helius_txns, wallet)
+        elif sampled_txns:
             try:
                 for tx in sampled_txns:
                     swaps = _extract_swaps_from_tx(tx, wallet, token_list)
@@ -1135,12 +1264,14 @@ async def analyze_wallet(wallet: str) -> dict:
         if helius_txns:
             net_worth_timeline = _build_net_worth_timeline_helius(helius_txns, wallet)
             protocol_stats = _build_protocol_stats_helius(helius_txns)
+            # Build activity heatmap from Helius timestamps (more complete than RPC sigs)
+            activity_heatmap = _build_activity_heatmap_helius(helius_txns)
         else:
             net_worth_timeline = _build_net_worth_timeline(signatures, sampled_txns, wallet)
             protocol_stats = _build_protocol_stats(sampled_txns)
+            activity_heatmap = _build_activity_heatmap(signatures)
         loss_by_token = _build_loss_by_token(all_swaps)
         loss_by_period = _build_loss_by_period(all_swaps)
-        activity_heatmap = _build_activity_heatmap(signatures)
 
         # Wallet age
         wallet_age_days = None
