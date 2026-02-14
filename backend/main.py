@@ -43,7 +43,9 @@ app = FastAPI(title="Solana Roast Bot")
 @app.on_event("startup")
 def startup():
     try:
-        db.init_db()
+        from backend.migrate import run_migrations
+        run_migrations()
+        db.init_db()  # SQLite fallback for local dev
     except Exception as e:
         print(f"⚠️ DB init failed (will retry on first query): {e}")
 
