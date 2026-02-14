@@ -38,6 +38,12 @@ export default function RoastResult({ roast, wallet }) {
 
   return (
     <>
+      {roast.persona_name && (
+        <div className="roast-persona-badge">
+          <span className="persona-badge-icon">{roast.persona_icon || '🦍'}</span>
+          <span>Roasted by <strong>{roast.persona_name}</strong></span>
+        </div>
+      )}
       <div className="result-title">"{roast.title}"</div>
       <div className="result-summary">{roast.summary}</div>
       <div className="score-wrap">

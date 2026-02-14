@@ -224,11 +224,21 @@ def _compute_achievements(roast: dict, analysis: dict) -> list:
 
 class RoastRequest(BaseModel):
     wallet: str
+    persona: str = "degen"
 
 
 class BattleRequest(BaseModel):
     wallet1: str
     wallet2: str
+
+
+@app.get("/api/personas")
+async def api_personas():
+    from backend.roaster.roast_engine import PERSONA_PROMPTS
+    return [
+        {"id": k, "name": v["name"], "icon": v["icon"]}
+        for k, v in PERSONA_PROMPTS.items()
+    ]
 
 
 @app.post("/api/roast")
@@ -239,8 +249,11 @@ async def api_roast(req: RoastRequest, request: Request):
     if not _check_rate_limit(ip, wallet):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Touch some grass and try again later. 🌱")
 
+    persona = req.persona if req.persona in ("degen", "gordon", "shakespeare", "drill_sergeant") else "degen"
+    cache_key = f"{wallet}:{persona}"
+
     # Check cache
-    cached = _get_cached(wallet)
+    cached = _get_cached(cache_key)
     if cached:
         return cached
 
@@ -260,7 +273,7 @@ async def api_roast(req: RoastRequest, request: Request):
         if fairscale_data:
             db.save_fairscale_score(wallet, fairscale_data)
 
-        roast = await asyncio.wait_for(generate_roast(analysis, fairscale_data=fairscale_data), timeout=ROAST_TIMEOUT)
+        roast = await asyncio.wait_for(generate_roast(analysis, fairscale_data=fairscale_data, persona=req.persona), timeout=ROAST_TIMEOUT)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Roast timed out — this wallet is too complex even for us 🕐")
     except Exception as e:
@@ -285,13 +298,13 @@ async def api_roast(req: RoastRequest, request: Request):
             "features": fairscale_data.get("features", {}),
         }
 
-    _set_cache(wallet, roast)
+    _set_cache(cache_key, roast)
     _record_rate_limit(ip, wallet)
 
     # Track analytics
     wallet_hash = hashlib.sha256(wallet.encode()).hexdigest()[:12]
-    asyncio.create_task(track_event("Wallet Submitted", {"wallet_hash": wallet_hash}))
-    asyncio.create_task(track_event("Roast Generated", {"wallet_hash": wallet_hash, "degen_score": score}))
+    asyncio.create_task(track_event("Wallet Submitted", {"wallet_hash": wallet_hash, "persona": persona}))
+    asyncio.create_task(track_event("Roast Generated", {"wallet_hash": wallet_hash, "degen_score": score, "persona": persona}))
 
     # Persist to DB
     db.save_roast(wallet, roast)

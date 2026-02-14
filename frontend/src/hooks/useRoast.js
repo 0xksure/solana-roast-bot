@@ -10,11 +10,11 @@ export function useRoast() {
   const [wallet, setWallet] = useState('');
   const cache = useRef({});
 
-  const doRoast = useCallback(async (input) => {
+  const doRoast = useCallback(async (input, persona = 'degen') => {
     const addr = input.trim();
     if (!addr) return;
 
-    mp('roast_started', { wallet: addr.slice(0, 8) + '...' });
+    mp('roast_started', { wallet: addr.slice(0, 8) + '...', persona });
 
     if (!WALLET_RE.test(addr)) {
       setError('Invalid Solana wallet address — check and try again');
@@ -26,15 +26,16 @@ export function useRoast() {
     setError(null);
     setRoast(null);
 
+    const cacheKey = `${addr}:${persona}`;
     try {
-      if (cache.current[addr]) {
-        setRoast(cache.current[addr]);
-        mp('roast_completed', { wallet: addr.slice(0, 8) + '...', degen_score: cache.current[addr].degen_score, title: cache.current[addr].title });
+      if (cache.current[cacheKey]) {
+        setRoast(cache.current[cacheKey]);
+        mp('roast_completed', { wallet: addr.slice(0, 8) + '...', degen_score: cache.current[cacheKey].degen_score, title: cache.current[cacheKey].title, persona });
       } else {
-        const data = await fetchRoast(addr);
-        cache.current[addr] = data;
+        const data = await fetchRoast(addr, persona);
+        cache.current[cacheKey] = data;
         setRoast(data);
-        mp('roast_completed', { wallet: addr.slice(0, 8) + '...', degen_score: data.degen_score, title: data.title });
+        mp('roast_completed', { wallet: addr.slice(0, 8) + '...', degen_score: data.degen_score, title: data.title, persona });
       }
       window.history.replaceState({}, '', `/?wallet=${addr}`);
     } catch (e) {

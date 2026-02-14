@@ -25,6 +25,7 @@ export default function App() {
   const { publicKey } = useWallet();
   const prevKey = useRef(null);
   const [battleMode, setBattleMode] = useState(false);
+  const [persona, setPersona] = useState('degen');
 
   // Auto-roast when wallet connects
   useEffect(() => {
@@ -32,22 +33,24 @@ export default function App() {
       const addr = publicKey.toBase58();
       if (addr !== prevKey.current) {
         prevKey.current = addr;
-        doRoast(addr);
+        doRoast(addr, persona);
       }
     }
-  }, [publicKey, doRoast, battleMode]);
+  }, [publicKey, doRoast, battleMode, persona]);
 
   // URL param on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const w = params.get('wallet');
+    const p = params.get('persona') || 'degen';
     if (w) {
-      doRoast(w);
+      setPersona(p);
+      doRoast(w, p);
       return;
     }
     const path = window.location.pathname.slice(1);
     if (path && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(path)) {
-      doRoast(path);
+      doRoast(path, persona);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -65,7 +68,7 @@ export default function App() {
       <div className="container">
         {!isLoading && !hasResult && (
           <>
-            <Hero onRoast={doRoast} error={error} battleMode={battleMode} onToggleBattle={setBattleMode} />
+            <Hero onRoast={doRoast} error={error} battleMode={battleMode} onToggleBattle={setBattleMode} persona={persona} onPersonaChange={setPersona} />
             {battleMode && <BattleMode onBattle={doBattle} error={battleError} />}
           </>
         )}

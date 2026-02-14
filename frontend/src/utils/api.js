@@ -6,11 +6,11 @@ export function mp(event, props) {
   } catch (e) { /* ignore */ }
 }
 
-export async function fetchRoast(wallet) {
+export async function fetchRoast(wallet, persona = 'degen') {
   const res = await fetch('/api/roast', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wallet }),
+    body: JSON.stringify({ wallet, persona }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

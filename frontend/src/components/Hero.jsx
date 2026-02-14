@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import WalletButton from './WalletButton';
+import PersonaSelector from './PersonaSelector';
 
 const EXAMPLES = [
   { name: 'Toly', addr: 'CKs1E69a2e9TmH4mKKLrXFF8kD3ZnwKjoEuXa6sz9WqX' },
@@ -7,7 +8,7 @@ const EXAMPLES = [
   { name: 'Whale 🐋', addr: '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9' },
 ];
 
-export default function Hero({ onRoast, error, battleMode, onToggleBattle }) {
+export default function Hero({ onRoast, error, battleMode, onToggleBattle, persona, onPersonaChange }) {
   const [input, setInput] = useState('');
   const [stats, setStats] = useState(null);
 
@@ -16,7 +17,7 @@ export default function Hero({ onRoast, error, battleMode, onToggleBattle }) {
   }, []);
 
   const handleSubmit = () => {
-    if (input.trim()) onRoast(input.trim());
+    if (input.trim()) onRoast(input.trim(), persona);
   };
 
   return (
@@ -36,6 +37,7 @@ export default function Hero({ onRoast, error, battleMode, onToggleBattle }) {
 
       {!battleMode && (
         <>
+          <PersonaSelector selected={persona} onSelect={onPersonaChange} />
           <div className="input-wrap">
             <input
               type="text"
@@ -57,7 +59,7 @@ export default function Hero({ onRoast, error, battleMode, onToggleBattle }) {
           <div className="examples">
             Try a famous wallet:{' '}
             {EXAMPLES.map(ex => (
-              <span key={ex.name} onClick={() => { setInput(ex.addr); onRoast(ex.addr); }}>
+              <span key={ex.name} onClick={() => { setInput(ex.addr); onRoast(ex.addr, persona); }}>
                 {ex.name}
               </span>
             ))}

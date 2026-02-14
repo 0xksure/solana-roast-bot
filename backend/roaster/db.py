@@ -48,9 +48,10 @@ if DATABASE_URL:
     def save_roast(wallet: str, roast: dict):
         conn = _get_conn()
         cur = conn.cursor()
+        persona = roast.get("persona", "degen")
         cur.execute(
-            "INSERT INTO roasts (wallet, roast_json, created_at) VALUES (%s, %s, %s)",
-            (wallet, json.dumps(roast), time.time())
+            "INSERT INTO roasts (wallet, roast_json, created_at, persona) VALUES (%s, %s, %s, %s)",
+            (wallet, json.dumps(roast), time.time(), persona)
         )
         conn.commit()
         conn.close()
@@ -252,9 +253,10 @@ else:
 
     def save_roast(wallet: str, roast: dict):
         conn = _get_conn()
+        persona = roast.get("persona", "degen")
         conn.execute(
-            "INSERT INTO roasts (wallet, roast_json, created_at) VALUES (?, ?, ?)",
-            (wallet, json.dumps(roast), time.time())
+            "INSERT INTO roasts (wallet, roast_json, created_at, persona) VALUES (?, ?, ?, ?)",
+            (wallet, json.dumps(roast), time.time(), persona)
         )
         conn.commit()
         conn.close()
