@@ -619,7 +619,17 @@ if (STATIC_DIR / "img").exists():
 
 @app.get("/")
 async def index():
-    return FileResponse(str(STATIC_DIR / "index.html"))
+    import hashlib as _hl
+    content = open(str(STATIC_DIR / "index.html"), "rb").read()
+    return Response(
+        content=content,
+        media_type="text/html",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "ETag": f'"{_hl.md5(content).hexdigest()[:12]}"',
+        },
+    )
 
 
 @app.get("/{wallet}")
