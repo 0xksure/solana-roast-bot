@@ -1022,13 +1022,28 @@ def _build_net_worth_timeline_helius(txns: list, wallet: str) -> list:
         month = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m")
         monthly_tx_count[month] += 1
         
-        # Track SOL flow
+        # Track SOL flow from native transfers
         for nt in tx.get("nativeTransfers", []):
             amount_sol = nt.get("amount", 0) / 1e9
             if nt.get("toUserAccount") == wallet:
                 running += amount_sol
             elif nt.get("fromUserAccount") == wallet:
                 running -= amount_sol
+        
+        # Track wrapped SOL (So11...2) token transfers
+        for tt in tx.get("tokenTransfers", []):
+            if tt.get("mint") == SOL_MINT:
+                amount_sol = tt.get("tokenAmount", 0)
+                if isinstance(amount_sol, (int, float)):
+                    if tt.get("toUserAccount") == wallet:
+                        running += amount_sol
+                    elif tt.get("fromUserAccount") == wallet:
+                        running -= amount_sol
+        
+        # Subtract transaction fee
+        fee_lamports = tx.get("fee", 0)
+        if fee_lamports:
+            running -= fee_lamports / 1e9
         
         monthly_balance[month] = running
     
@@ -1080,6 +1095,12 @@ def _build_protocol_stats_helius(txns: list) -> list:
     """Build protocol stats from Helius enhanced transactions."""
     protocol_counts: dict[str, int] = defaultdict(int)
     
+    # Infrastructure programs to exclude from display
+    INFRA_NAMES = {
+        "System", "Token Program", "Associated Token", "Compute Budget",
+        "Address Lookup", "spl-memo",
+    }
+    
     # Map Helius source to readable names
     name_map = {
         "JUPITER": "Jupiter", "RAYDIUM": "Raydium", "ORCA": "Orca",
@@ -1095,28 +1116,27 @@ def _build_protocol_stats_helius(txns: list) -> list:
         source = tx.get("source", "UNKNOWN")
         seen_in_tx: set[str] = set()
         
+        # Primary: use Helius source field
         name = name_map.get(source)
         if name:
             seen_in_tx.add(name)
         elif source not in ("SYSTEM_PROGRAM", "UNKNOWN", ""):
-            seen_in_tx.add(source.replace("_", " ").title())
+            readable = source.replace("_", " ").title()
+            if readable not in INFRA_NAMES:
+                seen_in_tx.add(readable)
         
-        # Also check instructions for program IDs → cross-reference KNOWN_PROGRAMS
+        # Secondary: check instructions for program IDs
         for inst in tx.get("instructions", []):
             pid = inst.get("programId", "")
             prog_name = KNOWN_PROGRAMS.get(pid)
-            if prog_name and prog_name not in ("System", "Token Program", "Associated Token", "Compute Budget"):
-                seen_in_tx.add(prog_name)
-        
-        # Check accountData for additional program interactions
-        for acc in tx.get("accountData", []):
-            pid = acc.get("account", "")
-            prog_name = KNOWN_PROGRAMS.get(pid)
-            if prog_name and prog_name not in ("System", "Token Program", "Associated Token", "Compute Budget"):
+            if prog_name and prog_name not in INFRA_NAMES:
                 seen_in_tx.add(prog_name)
         
         for n in seen_in_tx:
             protocol_counts[n] += 1
+    
+    if not protocol_counts:
+        return []
     
     total = sum(protocol_counts.values())
     return [
@@ -1382,4 +1402,5 @@ async def analyze_wallet(wallet: str) -> dict:
             "loss_by_token": loss_by_token,
             "loss_by_period": loss_by_period,
             "activity_heatmap": activity_heatmap,
+            "monthly_activity": timeline.get("active_periods", []),
         }

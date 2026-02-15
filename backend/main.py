@@ -260,20 +260,24 @@ async def api_roast(req: RoastRequest, request: Request):
     wallet = _validate_wallet(req.wallet)
     ip = request.client.host if request.client else "unknown"
 
+    # Support ?force=true to bypass all caches
+    force = request.query_params.get("force", "").lower() in ("true", "1", "yes")
+
     if not _check_rate_limit(ip, wallet):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Touch some grass and try again later. 🌱")
 
     persona = req.persona if req.persona in ("degen", "gordon", "shakespeare", "drill_sergeant") else "degen"
     cache_key = f"{wallet}:{persona}"
 
-    # Check cache
-    cached = _get_cached(cache_key)
-    if cached:
-        return cached
+    # Check cache (skip if force refresh)
+    if not force:
+        cached = _get_cached(cache_key)
+        if cached:
+            return cached
 
     try:
         # Check DB cache for analysis (saves RPC calls)
-        analysis = db.get_cached_analysis(wallet)
+        analysis = db.get_cached_analysis(wallet) if not force else None
         if not analysis:
             # Fetch wallet analysis and FairScale score in parallel
             analysis_task = asyncio.wait_for(analyze_wallet(wallet), timeout=ROAST_TIMEOUT)
