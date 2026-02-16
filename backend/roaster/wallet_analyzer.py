@@ -25,8 +25,8 @@ _token_cache: dict[str, dict] = {}
 _token_cache_ts: float = 0
 TOKEN_CACHE_TTL = 6 * 3600  # 6 hours
 
-MAX_HELIUS_PAGES = int(os.environ.get("MAX_HELIUS_PAGES", "50"))
-MAX_RPC_SIG_PAGES = int(os.environ.get("MAX_RPC_SIG_PAGES", "20"))
+MAX_HELIUS_PAGES = int(os.environ.get("MAX_HELIUS_PAGES", "200"))
+MAX_RPC_SIG_PAGES = int(os.environ.get("MAX_RPC_SIG_PAGES", "50"))
 
 KNOWN_PROGRAMS = {
     "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4": "Jupiter",
@@ -267,11 +267,12 @@ def _analyze_helius_txns(txns: list) -> dict:
         elif tx_type in ("NFT_SALE", "NFT_MINT", "NFT_LISTING", "NFT_BID"):
             nft_count += 1
         
-        # Track programs (map to readable names)
+        # Track programs (map to readable names) — use comprehensive registry
+        from backend.roaster.program_registry import PROGRAM_ID_TO_NAME
         for inst in tx.get("instructions", []):
             pid = inst.get("programId", "")
             if pid:
-                name = KNOWN_PROGRAMS.get(pid, pid[:12] + "..." if len(pid) > 12 else pid)
+                name = PROGRAM_ID_TO_NAME.get(pid) or KNOWN_PROGRAMS.get(pid, pid[:12] + "..." if len(pid) > 12 else pid)
                 programs[name] += 1
         
         # Track native SOL transfers
@@ -1002,71 +1003,92 @@ def _build_activity_heatmap(sigs: list) -> dict:
     return heatmap
 
 
-def _build_net_worth_timeline_helius(txns: list, wallet: str) -> list:
+def _build_net_worth_timeline_helius(txns: list, wallet: str, current_sol_balance: float = 0.0) -> list:
     """Build net worth timeline from Helius enhanced transactions.
+    
+    Strategy: Work BACKWARDS from the current known SOL balance.
+    For each transaction (newest→oldest), reverse its effect on balance
+    to reconstruct historical balances. This is accurate regardless of
+    whether we have complete history — the recent end is always correct.
     
     Returns same shape as _build_net_worth_timeline for chart compatibility:
     [{month, estimated_sol, tx_count, sol_price_usd, estimated_usd}, ...]
     """
-    monthly_balance: dict[str, float] = {}
     monthly_tx_count: dict[str, int] = defaultdict(int)
-    running = 0.0
     
-    # Sort by timestamp (oldest first)
-    sorted_txns = sorted(txns, key=lambda t: t.get("timestamp", 0))
+    # Count txns per month
+    for tx in txns:
+        ts = tx.get("timestamp", 0)
+        if ts:
+            month = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m")
+            monthly_tx_count[month] += 1
     
+    if not monthly_tx_count:
+        return []
+    
+    # Sort newest first for backward reconstruction
+    sorted_txns = sorted(txns, key=lambda t: t.get("timestamp", 0), reverse=True)
+    
+    # Walk backwards: start at current balance and undo each transaction
+    running = current_sol_balance
+    # Store balance snapshots keyed by (year, month) — use the balance BEFORE
+    # the first transaction of each month as the end-of-previous-month balance
+    month_end_balances: dict[str, float] = {}
+    
+    current_month = datetime.now(tz=timezone.utc).strftime("%Y-%m")
+    month_end_balances[current_month] = running
+    
+    prev_month = current_month
     for tx in sorted_txns:
         ts = tx.get("timestamp", 0)
         if not ts:
             continue
-        month = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m")
-        monthly_tx_count[month] += 1
+        tx_month = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m")
         
-        # Track SOL flow from native transfers
+        # If we've moved to an earlier month, snapshot before undoing this tx
+        if tx_month != prev_month:
+            # The balance right now (before undoing this tx) is the end-of-prev_month
+            # Actually: running currently = balance after all txns in prev_month are undone
+            # Save end-of-tx_month balance (= balance just before we start undoing tx_month txns)
+            if prev_month not in month_end_balances:
+                month_end_balances[prev_month] = running
+            prev_month = tx_month
+        
+        # Undo this transaction: reverse SOL flows
         for nt in tx.get("nativeTransfers", []):
             amount_sol = nt.get("amount", 0) / 1e9
             if nt.get("toUserAccount") == wallet:
-                running += amount_sol
+                running -= amount_sol  # undo: we received, so subtract
             elif nt.get("fromUserAccount") == wallet:
-                running -= amount_sol
+                running += amount_sol  # undo: we sent, so add back
         
-        # Track wrapped SOL (So11...2) token transfers
+        # Undo wrapped SOL transfers
         for tt in tx.get("tokenTransfers", []):
             if tt.get("mint") == SOL_MINT:
                 amount_sol = tt.get("tokenAmount", 0)
                 if isinstance(amount_sol, (int, float)):
                     if tt.get("toUserAccount") == wallet:
-                        running += amount_sol
-                    elif tt.get("fromUserAccount") == wallet:
                         running -= amount_sol
+                    elif tt.get("fromUserAccount") == wallet:
+                        running += amount_sol
         
-        # Subtract transaction fee
+        # Undo fee (add it back since it was subtracted)
         fee_lamports = tx.get("fee", 0)
-        if fee_lamports:
-            running -= fee_lamports / 1e9
+        if fee_lamports and tx.get("feePayer") == wallet:
+            running += fee_lamports / 1e9
         
-        monthly_balance[month] = running
+        # Save balance for this month (updated as we process more txns in this month)
+        month_end_balances[tx_month] = running
     
-    if not monthly_balance:
-        return []
-    
-    # Build continuous timeline (fill gaps with forward-fill)
-    all_months = sorted(set(list(monthly_balance.keys()) + list(monthly_tx_count.keys())))
-    if not all_months:
-        return []
-    
-    # Extend to current month
+    # Build continuous timeline
+    all_months_sorted = sorted(monthly_tx_count.keys())
     now = datetime.now(tz=timezone.utc)
     last_month = f"{now.year:04d}-{now.month:02d}"
-    if last_month > all_months[-1]:
-        all_months.append(last_month)
     
-    # Fill in missing months between first and last
+    first = all_months_sorted[0]
     filled_months = []
-    first = all_months[0]
-    last = all_months[-1]
     y, m = int(first[:4]), int(first[5:7])
-    ly, lm = int(last[:4]), int(last[5:7])
+    ly, lm = int(last_month[:4]), int(last_month[5:7])
     while (y, m) <= (ly, lm):
         filled_months.append(f"{y:04d}-{m:02d}")
         m += 1
@@ -1074,11 +1096,12 @@ def _build_net_worth_timeline_helius(txns: list, wallet: str) -> list:
             m = 1
             y += 1
     
+    # Forward-fill from known snapshots
     timeline = []
     last_known = 0.0
     for month_key in filled_months:
-        if month_key in monthly_balance:
-            last_known = monthly_balance[month_key]
+        if month_key in month_end_balances:
+            last_known = month_end_balances[month_key]
         sol_price = SOL_PRICE_HISTORY.get(month_key, 0)
         timeline.append({
             "month": month_key,
@@ -1092,44 +1115,51 @@ def _build_net_worth_timeline_helius(txns: list, wallet: str) -> list:
 
 
 def _build_protocol_stats_helius(txns: list) -> list:
-    """Build protocol stats from Helius enhanced transactions."""
+    """Build protocol stats from Helius enhanced transactions.
+    
+    Uses three layers of detection:
+    1. Helius `source` field (covers major protocols)
+    2. Instruction-level program ID matching against comprehensive registry
+    3. Inner instruction program IDs (catches protocols invoked via CPI)
+    """
+    from backend.roaster.program_registry import (
+        PROGRAM_ID_TO_NAME, HELIUS_SOURCE_MAP, INFRA_PROGRAMS,
+    )
+    
     protocol_counts: dict[str, int] = defaultdict(int)
-    
-    # Infrastructure programs to exclude from display
-    INFRA_NAMES = {
-        "System", "Token Program", "Associated Token", "Compute Budget",
-        "Address Lookup", "spl-memo",
-    }
-    
-    # Map Helius source to readable names
-    name_map = {
-        "JUPITER": "Jupiter", "RAYDIUM": "Raydium", "ORCA": "Orca",
-        "MARINADE": "Marinade", "MARGINFI": "Marginfi", "TENSOR": "Tensor",
-        "MAGIC_EDEN": "Magic Eden", "PHANTOM": "Phantom", "METEORA": "Meteora",
-        "SOLEND": "Solend", "DRIFT": "Drift", "OPENBOOK": "OpenBook",
-        "PUMP_FUN": "Pump.fun", "MOONSHOT": "Moonshot", "HADESWAP": "Hadeswap",
-        "PHOENIX": "Phoenix", "MERCURIAL": "Mercurial", "SERUM": "Serum",
-        "JITO": "Jito", "STAKENET": "Stakenet",
-    }
     
     for tx in txns:
         source = tx.get("source", "UNKNOWN")
         seen_in_tx: set[str] = set()
         
-        # Primary: use Helius source field
-        name = name_map.get(source)
-        if name:
+        # Layer 1: Helius source field
+        name = HELIUS_SOURCE_MAP.get(source, "")
+        if name and name not in INFRA_PROGRAMS:
             seen_in_tx.add(name)
-        elif source not in ("SYSTEM_PROGRAM", "UNKNOWN", ""):
+        elif source not in ("SYSTEM_PROGRAM", "UNKNOWN", "", "W_SOL"):
             readable = source.replace("_", " ").title()
-            if readable not in INFRA_NAMES:
+            if readable not in INFRA_PROGRAMS:
                 seen_in_tx.add(readable)
         
-        # Secondary: check instructions for program IDs
+        # Layer 2: Instruction-level program ID matching
         for inst in tx.get("instructions", []):
             pid = inst.get("programId", "")
-            prog_name = KNOWN_PROGRAMS.get(pid)
-            if prog_name and prog_name not in INFRA_NAMES:
+            prog_name = PROGRAM_ID_TO_NAME.get(pid) or KNOWN_PROGRAMS.get(pid)
+            if prog_name and prog_name not in INFRA_PROGRAMS:
+                seen_in_tx.add(prog_name)
+            
+            # Layer 3: Inner instructions (CPI calls)
+            for inner in inst.get("innerInstructions", []):
+                inner_pid = inner.get("programId", "")
+                inner_name = PROGRAM_ID_TO_NAME.get(inner_pid) or KNOWN_PROGRAMS.get(inner_pid)
+                if inner_name and inner_name not in INFRA_PROGRAMS:
+                    seen_in_tx.add(inner_name)
+        
+        # Also check top-level accountData for program interactions
+        for acc in tx.get("accountData", []):
+            pid = acc.get("account", "")
+            prog_name = PROGRAM_ID_TO_NAME.get(pid)
+            if prog_name and prog_name not in INFRA_PROGRAMS:
                 seen_in_tx.add(prog_name)
         
         for n in seen_in_tx:
@@ -1142,7 +1172,7 @@ def _build_protocol_stats_helius(txns: list) -> list:
     return [
         {"name": n, "tx_count": c, "pct": round(c / total * 100, 1) if total > 0 else 0}
         for n, c in sorted(protocol_counts.items(), key=lambda x: -x[1])
-    ][:15]
+    ][:25]
 
 
 def _extract_swaps_from_helius(txns: list, wallet: str) -> list:
@@ -1255,7 +1285,7 @@ async def analyze_wallet(wallet: str) -> dict:
             try:
                 helius_start = time.time()
                 helius_txns = await asyncio.wait_for(
-                    _get_helius_history(client, wallet), timeout=60
+                    _get_helius_history(client, wallet), timeout=120
                 )
                 helius_elapsed = time.time() - helius_start
                 if helius_txns:
@@ -1336,7 +1366,7 @@ async def analyze_wallet(wallet: str) -> dict:
 
         # Build chart data — use Helius-enriched data when available
         if helius_txns:
-            net_worth_timeline = _build_net_worth_timeline_helius(helius_txns, wallet)
+            net_worth_timeline = _build_net_worth_timeline_helius(helius_txns, wallet, current_sol_balance=sol_balance)
             protocol_stats = _build_protocol_stats_helius(helius_txns)
             # Build activity heatmap from Helius timestamps (more complete than RPC sigs)
             activity_heatmap = _build_activity_heatmap_helius(helius_txns)

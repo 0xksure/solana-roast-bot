@@ -1,0 +1,287 @@
+"""Comprehensive Solana program ID → protocol name mapping.
+
+Sources: Helius docs, SolanaFM, Solscan, community registries.
+Last updated: 2026-02-16
+"""
+
+# program_id → (protocol_name, category)
+# Categories: defi, dex, lending, nft, infra, governance, liquid_staking, perps, launchpad, bridge, oracle, payments
+
+PROGRAM_REGISTRY: dict[str, tuple[str, str]] = {
+    # ── DEX / AMM ──
+    "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4": ("Jupiter V6", "dex"),
+    "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB": ("Jupiter V4", "dex"),
+    "JUP3c2Uh3WA4Ng34tw6kPd2G4C5BB21Xo36Je1s32Ph": ("Jupiter V3", "dex"),
+    "JUP2jxvXaqu7NQY1GmNF4m1vodw12LVXYxbFL2uN9oJ": ("Jupiter V2", "dex"),
+    "jCebN34bUfdeUYJT13J1yG16XWQpt5PDx6Mse9GUqhR": ("Jupiter Limit Order", "dex"),
+    "jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu": ("Jupiter DCA", "dex"),
+    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8": ("Raydium AMM V4", "dex"),
+    "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK": ("Raydium CLMM", "dex"),
+    "routeUGWgWzqBWFcrCfv8tritsqukccJPu3q5GPP3xS": ("Raydium Route", "dex"),
+    "27haf8L6oxUeXrHrgEgsexjSY5hbVUWEmvv9Nyxg8vQv": ("Raydium V3", "dex"),
+    "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C": ("Raydium CPMM", "dex"),
+    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc": ("Orca Whirlpool", "dex"),
+    "DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1": ("Orca (Legacy)", "dex"),
+    "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP": ("Orca Token Swap V2", "dex"),
+    "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY": ("Phoenix", "dex"),
+    "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX": ("Serum V3", "dex"),
+    "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin": ("OpenBook V1", "dex"),
+    "opnb2LAfJYbRMAHHvqjCwQxanZn7ReEHp1k81EQMQvR": ("OpenBook V2", "dex"),
+    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo": ("Meteora DLMM", "dex"),
+    "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB": ("Meteora Pools", "dex"),
+    "MEisE1HzehtrDpAAT8PnLHjpSSkRYakotTuJRPjTpo8": ("Meteora", "dex"),
+    "SSwpkEEcbUqx4vtoEByFjSkhKdCT862DNVb52nZg1UZ": ("Saber Stable Swap", "dex"),
+    "MERLuDFBMmsHnsBPZw2sDQZHvXFMwp8EdjudcU2HKky": ("Mercurial", "dex"),
+    "Dooar9JkhdZ7J3LHN3A7YCuoGRUggXhQaG4kijfLGU2j": ("Stepn DEX", "dex"),
+    "HyaB3W9q6XdA5xwpU4XnSZV94htfmbmqJXDWRRH4Srzm": ("Lifinity V2", "dex"),
+    "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c": ("Lifinity V1", "dex"),
+    "FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X": ("FluxBeam", "dex"),
+    "GFXsSL5sSaDfNFQUYsHekbWBW1TsFdjDYzACh62tEHxn": ("GooseFX", "dex"),
+    "SSwapUtytfBdBn1b9NUGG6foMVPtcWgpRU32HToDUZr": ("Saros AMM", "dex"),
+    "CTMAxxk34HjKWxQ3QLZK1HpaLXmBveao3ESePXbiyfzh": ("Cropper", "dex"),
+    "CLMM9tUoggJu2wagPkkqs9eFG4BWhVBZWkP1qv3Sp7tR": ("Crema Finance", "dex"),
+    "cysPXAjehMpVKUapzbMCCnpFxUFFryEWEaLgnb9NrR8": ("Cykura (Cyclos)", "dex"),
+    "Gswppe6ERWKpUTXvRPfXdzHhiCyJvLadVvXGfdpBqcE1": ("Guacamole", "dex"),
+    "treaborX3wEfEW7PEnSRhjZrPnQBnpLFmper6MfKxCb": ("Treehouse", "dex"),
+    "BSwp6bEBihVLdqJRKGgzjcGLHkcTuzmSo1TQkHepzH8p": ("Bonkswap", "dex"),
+    "FarmuwXFunEXoXvg45YBePVGks5CvhzTTjhCLCmhe1Yk": ("Aldrin AMM", "dex"),
+    "AMM55ShdkoGRB5jVYPjWziwk8m5MpwyDgsMWHaMSQWH6": ("Aldrin AMM V2", "dex"),
+    "PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu": ("Perp Protocol", "dex"),
+
+    # ── Lending / Borrowing ──
+    "MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA": ("Marginfi", "lending"),
+    "KLend2g3cP87ber8p32A8W3kddnSJP4JiSam8PXUy2G": ("Kamino Lending", "lending"),
+    "So1endDq2YkqhipRh3WViPa8hdiSpxWy6z3Z6tMCpAo": ("Solend", "lending"),
+    "SLendK7ySfcEzyaFqy93gDnD3RtrpXJcnRwb6zFHJSh": ("Solend V2", "lending"),
+    "Port7uDYB3wk6GJAw4KT1WpTeMtSu9bTcB3He4XRDGg": ("Port Finance", "lending"),
+    "FqGg2Y1FNxMiGd51Q6UETixQWkF5fB92MysbYogRJb3P": ("Tulip", "lending"),
+    "FrktAKnAmjTYfBhuzxr9copS7YZ155cCNaDfassP3F5L": ("Frakt", "lending"),
+    "SharkysFHjhJ4bBrmLnBRZ9QfMGxMHfe85VMusFhaij": ("Sharky", "lending"),
+    "PLENDj46Y4hhUFPfd4CZUBSRCtiibJRm5GSxQFaKaxa": ("Plend", "lending"),
+    "RainEraPU5yDoJmTrHdYynK9739QM4FGsFWnnnPZYoY": ("Rain.fi", "lending"),
+    "SoLXmnP9JvL6vJ7rn2sTTAteh6h7Gcxzv3Rqhkkz1Cb": ("Solax", "lending"),
+    "BLendhFh4HGnycEDDFhbeFkUYME16bk6XEVn2MYyvo6m": ("Blend", "lending"),
+
+    # ── Perpetuals / Derivatives ──
+    "DRiFTiKWQGEhGJMFB9gNbFLo9LkB4W8UT1VeR5bHBygh": ("Drift", "perps"),
+    "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH": ("Drift V2", "perps"),
+    "ZETAxsqBRek56DhiGXrn75yj2NHU3aYUnxvHXpkf3aD": ("Zeta Markets", "perps"),
+    "FUfpR31LmcP1VSbz5zDaM7nxnH55iBHkpwusgrnhaFjL": ("Mango V4", "perps"),
+    "mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68": ("Mango V3", "perps"),
+    "4MangoMjqJ2firMokCjjGPuH8rk3RJL26Yq8Mv3XEZ8": ("Mango V2", "perps"),
+    "PsychEbrn5SPZGSS8sUTDhVP2JNHiSWgzBK2dqFVfFo": ("Psych Finance", "perps"),
+    "HxrEu1gXuH7iD3Puua1ohd5n4iUKJyFNtNxk9DVJkvgr": ("Cypher Protocol", "perps"),
+    "perpke6JybKfRDitCRgGos4TXgWfNDJCCHECn1Mfpvj": ("01 Exchange (Perp)", "perps"),
+    "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS": ("Bonfida (Perps)", "perps"),
+
+    # ── Liquid Staking ──
+    "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD": ("Marinade Finance", "liquid_staking"),
+    "SPoo1Ku8WFXoNDMHPsrGSTSG1Y47rzgn41SLUNakuHy": ("Marinade Stake Pool", "liquid_staking"),
+    "jdswHyVGU9qmvSZqczSk6gCkJQPALmFLND5aTj7QjDu": ("Jito Stake Pool", "liquid_staking"),
+    "Jito4APyf642JPZPx3hGc6WWJ8zPKtRbRs4P815Awbb": ("Jito", "liquid_staking"),
+    "StakesGhostwLxaVDuWmMdBQPEE9K3sNjHqRVpAfaz": ("Stakenet", "liquid_staking"),
+    "stkitrT1Uoy18Dk1fTrgPw8W6MVzoCfYoAFT4MLsmhq": ("Sanctum", "liquid_staking"),
+    "5ocnV1qiCgaQR8Jb8xWnVbApfaygJ8tNoZfgPwsgx9kx": ("Socean Stake Pool", "liquid_staking"),
+    "CgntPoLka5pD5fesJYhGmUCF8KU1QS1ZmZiuAuMZr2az": ("Cogent", "liquid_staking"),
+    "SVMBJkASkXbPaPPMFXuYGdEgqbJpsLkHb3h7p2X7tCC": ("SVM Stake", "liquid_staking"),
+    "stWirqFCf2Uts1JBL1Jsd3r6VBWhgnpdPxCTe1MFjrq": ("Laine Stake", "liquid_staking"),
+    "BgxhEodEiQQbqYKvsSTUgMmBRPGgK2TrLsRPbCUhBo9H": ("BlazeStake", "liquid_staking"),
+
+    # ── NFT Marketplaces ──
+    "TSWAPaqyCSx2KABk68Shruf4rp7CxcNi8hAsbdwmHbN": ("Tensor Swap", "nft"),
+    "TCMPhJdwDryooaGtiocG1u3xcYbRpiJzb283XfCZsDp": ("Tensor cNFT", "nft"),
+    "TBidz2fJy2kLqoNSgEceLfaBm3BKQVS8VF5gANjhvLi": ("Tensor Bid", "nft"),
+    "TLiSTFnBnpGREcjQ2sNqRpGb7fiFy3x7MGAE8HE16bq": ("Tensor Listing", "nft"),
+    "M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K": ("Magic Eden V2", "nft"),
+    "M3mxk5W2tt27WGT7THox7PmgRDp4m6NEhL5xvxrBfS1": ("Magic Eden V3", "nft"),
+    "mmm3XBJg5gk8XJxEKBvdgptZz6SgK4tXvn36sodowMc": ("Magic Eden AMM", "nft"),
+    "hadeK9DLv9eA7ya5KCTqSvSvRZeJC3JgD5a9Y3CNbvu": ("Hadeswap", "nft"),
+    "CJsLwbP1iu5DuUikMin8LH9xfIRST3k45wfnwCSR1Gp": ("Tensor cNFT Swap", "nft"),
+    "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d": ("Metaplex Core", "nft"),
+    "cndy3Z4yapfJBmL3ShUp5exZKqR3z33thTzmNMqkqCE": ("Candy Machine V2", "nft"),
+    "CndyV3LdqHUfDLmE5naZjVN8rBZz4tqhdefbAnjHG3JR": ("Candy Machine V3", "nft"),
+    "Guard1JwRhJkVH6XZhzoYxeBVQe872VH6QggF4BWmS9g": ("Candy Guard", "nft"),
+    "SNPRohhBurQwrpwAptw1QYtpFdfEKitr4WSJ125cN1g": ("Sniper Market", "nft"),
+    "HYPERfwdTjyJ2SCaKHmpF2MtrXqWxrsotYDeTBs1v9SMFQ8": ("Hyperspace", "nft"),
+    "AuctioneerC7pSQyA7Ge3Zs1AXbGNyZXe4GBXFzaKEqPL": ("Auctioneer", "nft"),
+
+    # ── Metaplex / Token Metadata ──
+    "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s": ("Metaplex Token Metadata", "nft"),
+    "p1exdMJcjVao65QdewkaZRUnU6VPSXhus9n2GzWfh98": ("Metaplex Fixed Price", "nft"),
+    "BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY": ("Bubblegum (cNFT)", "nft"),
+    "TokExjvjJmhKZQKUKRudbhswsgn4HVZ8DCfeKAQjZ2Z": ("Token Extensions", "infra"),
+
+    # ── Launchpad / Token Creation ──
+    "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P": ("Pump.fun", "launchpad"),
+    "moonshineXmXLn2GKnFNRRRXHWJmFNBQYeVzGJEXHF3": ("Moonshot", "launchpad"),
+    "LanMV9mKSqEAENaQ2yJ4BaFSmhTJvHrNkpUkfBLcuXj": ("Launch My NFT", "launchpad"),
+
+    # ── DeFi Aggregators & Yield ──
+    "KLnDhv8mJragW32sgWmNt54MoSRw7tMDSgK3Eb6shFu": ("Kamino Finance", "defi"),
+    "kvauTFR8qm1dhniz6pYuBZkuene3Hfrs1VQhVRgCNrr": ("Kamino Vault", "defi"),
+    "FarmqiPv5eAj3j1GMdMCMUGXqPUvmquZtMy86QH6rzhG": ("Raydium Farm", "defi"),
+    "9HzJyW1qZsEiSfMUf6L2jo3CcTKAyBmSyKdwQeYisHrC": ("Raydium Staking", "defi"),
+    "FARMSbBPMqJkYGMoFZDGbCMShBJSvahF7wdAme1DE8XU": ("Francium", "defi"),
+    "SFarm2janhkGbThHJcMNt3RahiXaeNsxmJoAoVaVSoq": ("StepFinance Farm", "defi"),
+    "STEPNq2UGeGSzCyGVr2nMQAzSBB5Y1bXJ3rRvLFRYcT": ("Step Finance", "defi"),
+    "cjg3oHmg9uuPsP8D6g29NWvhySJkdYdAo9D25PRbKXJ": ("Tulip Garden", "defi"),
+    "5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h": ("Apricot Finance", "defi"),
+    "HubblXXWR33vVk1xFgrPmGFzBE3C8jNtm3L3HCjJasZ": ("Hubble Protocol", "defi"),
+    "ArmN3Av2boBg8pkkeCK9UuCN9zSUVc2UQg1qR2sKwm8d": ("Armada", "defi"),
+
+    # ── Governance ──
+    "GovER5Lthms3bLBqWub97yVRqDfY73swg5bUCAGR12a": ("SPL Governance", "governance"),
+    "GovHgfDPyQ1GwjFhNkMqZrJdQMbzh6LWgm6DJ6piM6Sf": ("Governance V3", "governance"),
+    "AutoSPBP5JYLNgFiNELqL88vHsqZBob77qBUWBEL5zn": ("Autocrat/Futarchy", "governance"),
+    "voTpe3tHQ7AjQHMapgSue2HJFAh2cGsdokqN3XqmVSj": ("Realms Vote", "governance"),
+    "pytS9TjG1qyAZypk7n8rw8gfW9sUaqqYyMhJQ4E7JCQ": ("Pyth Governance Staking", "governance"),
+
+    # ── Oracle ──
+    "FsJ3A3u2vn5cTVofAjvy6y5kwABJAqYWpe4975bi2epH": ("Pyth Oracle", "oracle"),
+    "pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT": ("Pyth V2", "oracle"),
+    "SW1TCH7qEPTdLsDHRgPuMQjbQxKdH2aBStViMFnt64f": ("Switchboard V2", "oracle"),
+    "SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv": ("Switchboard Bond", "oracle"),
+
+    # ── Bridge ──
+    "wormDTUJ6AWPNvk59vGQbDvGJmqbDTdgWgAqcLBCgUb": ("Wormhole", "bridge"),
+    "WnFt12ZrnzZrFZkt2xsNsaNWoQribnuQ5B5FrDbwDhD": ("Wormhole NFT Bridge", "bridge"),
+    "3u8hJUVTA4jH1wYAyUur7FFZVQ8H635K3b7tBj2ixoxs": ("Allbridge Core", "bridge"),
+    "BrdgN2RPzEMWF96ZbnnJaUtQDQx7VRXYaHHbYCBvceWB": ("Allbridge", "bridge"),
+    "Portal11111111111111111111111111111111111111": ("Portal Bridge", "bridge"),
+    "DeBridgeSol111111111111111111111111111111111": ("deBridge", "bridge"),
+
+    # ── Payments / Streaming ──
+    "MSPCUMbLfy2MeT6geLMMzrUkACWQa47iKSpNhSshEkS": ("Mean Protocol", "payments"),
+    "BZeae1TuqM7gMspZoHVLea1gFkSmMPKFpPccToVLRwGT": ("Zebec Protocol", "payments"),
+    "dripTrkvSyQKvkyWg7oi4jmeEGMA5scSYowHArJ9Vwk": ("Drip (Superteam)", "payments"),
+
+    # ── Infrastructure / System ──
+    "11111111111111111111111111111111": ("System Program", "infra"),
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA": ("Token Program", "infra"),
+    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb": ("Token-2022", "infra"),
+    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL": ("Associated Token Program", "infra"),
+    "ComputeBudget111111111111111111111111111111": ("Compute Budget", "infra"),
+    "AddressLookupTab1e1111111111111111111111111": ("Address Lookup Table", "infra"),
+    "Memo1UhkJBfCR6MNB59dU1k37wifkHeXcpBiLHLBkJM": ("Memo V1", "infra"),
+    "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr": ("Memo V2", "infra"),
+    "namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX": ("Name Service", "infra"),
+    "Stake11111111111111111111111111111111111111": ("Stake Program", "infra"),
+    "Vote111111111111111111111111111111111111111": ("Vote Program", "infra"),
+
+    # ── Bots & MEV ──
+    "jitoTjPFLEvku34k3LeEfSMJn7JZV6cqLtr3KUaJQvX": ("Jito Tip", "infra"),
+    "T1pyyaTNZsKv2WcRAB8oVnk93mLJcXY73eR1nMKFiRp": ("Jito Tip Router", "infra"),
+
+    # ── Gaming / Social ──
+    "STARKEYGstark1111111111111111111111111111": ("Star Atlas", "gaming"),
+    "SNAKEZUDswfhvHwCxr7K3FaKNS8T7983bqfHGPnRjyR": ("Snakes Game", "gaming"),
+
+    # ── Name Services / Identity ──
+    "jCebN34bUfdeUYJT13J1yG16XWQpt5PDx6Mse9GUqhR": ("Jupiter Limit Order", "dex"),
+    "58PwtjSDuFHuUFEPV3VBRQVHR7LMheRiipFczRZFRp8L": ("Bonfida Name Service", "identity"),
+    "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf": ("Squads V4", "governance"),
+    "SMPLecH534NA9acpos4G6x7uf3LWbCAwZQE9e8ZekMu": ("Squads V3", "governance"),
+
+    # ── Miscellaneous DeFi ──
+    "MRKTXfKzzviUjAqiQVVMheTnQs3t1p5MibfMdNnNSEs": ("Aver (Prediction)", "defi"),
+    "hgovkRU6Ghe1Qoyb54HdSLdqN7VtxaifBzRmh9jtd3S": ("Helium Governance", "governance"),
+    "credMBJhYFzfn7NxBMdU4VMnixLRVbT5kAhQ6JJui5p": ("Credix", "lending"),
+    "LocktDzaV1W2Bm9DeZeiyz4J9zs4fRqNiYqQyracRXw": ("Token Lock", "defi"),
+    "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S": ("Lifinity Flares", "defi"),
+    "SAGEqqFewepDHR6J43EbSM7b1YLiRTjCnPm36T4pp3Q": ("Star Atlas SAGE", "gaming"),
+}
+
+# Build a flat name-only lookup for backward compatibility
+PROGRAM_ID_TO_NAME: dict[str, str] = {k: v[0] for k, v in PROGRAM_REGISTRY.items()}
+PROGRAM_ID_TO_CATEGORY: dict[str, str] = {k: v[1] for k, v in PROGRAM_REGISTRY.items()}
+
+# Infrastructure programs to exclude from user-facing protocol stats
+INFRA_PROGRAMS = {
+    "System Program", "Token Program", "Token-2022", "Associated Token Program",
+    "Compute Budget", "Address Lookup Table", "Memo V1", "Memo V2",
+    "Stake Program", "Vote Program", "Name Service",
+}
+
+# Helius source field → readable name mapping (covers values not in program registry)
+HELIUS_SOURCE_MAP: dict[str, str] = {
+    "JUPITER": "Jupiter",
+    "RAYDIUM": "Raydium",
+    "ORCA": "Orca",
+    "ORCA_WHIRLPOOLS": "Orca Whirlpool",
+    "MARINADE": "Marinade Finance",
+    "MARGINFI": "Marginfi",
+    "TENSOR": "Tensor",
+    "TENSORSWAP": "Tensor Swap",
+    "MAGIC_EDEN": "Magic Eden",
+    "MAGIC_EDEN_V2": "Magic Eden V2",
+    "PHANTOM": "Phantom",
+    "METEORA": "Meteora",
+    "METEORA_DLMM": "Meteora DLMM",
+    "SOLEND": "Solend",
+    "DRIFT": "Drift",
+    "OPENBOOK": "OpenBook",
+    "OPENBOOK_V2": "OpenBook V2",
+    "PUMP_FUN": "Pump.fun",
+    "PUMPFUN": "Pump.fun",
+    "MOONSHOT": "Moonshot",
+    "HADESWAP": "Hadeswap",
+    "PHOENIX": "Phoenix",
+    "MERCURIAL": "Mercurial",
+    "SERUM": "Serum",
+    "JITO": "Jito",
+    "STAKENET": "Stakenet",
+    "KAMINO": "Kamino Finance",
+    "SANCTUM": "Sanctum",
+    "LIFINITY": "Lifinity",
+    "SABER": "Saber",
+    "MANGO": "Mango",
+    "ZETA": "Zeta Markets",
+    "WORMHOLE": "Wormhole",
+    "ALLBRIDGE": "Allbridge",
+    "STEPN": "Stepn",
+    "STEP_FINANCE": "Step Finance",
+    "FRANCIUM": "Francium",
+    "TULIP": "Tulip",
+    "PORT": "Port Finance",
+    "APRICOT": "Apricot Finance",
+    "HUBBLE": "Hubble Protocol",
+    "FRAKT": "Frakt",
+    "SHARKY": "Sharky",
+    "CANDY_MACHINE_V2": "Candy Machine V2",
+    "CANDY_MACHINE_V3": "Candy Machine V3",
+    "METAPLEX": "Metaplex",
+    "BUBBLEGUM": "Bubblegum (cNFT)",
+    "FORM_FUNCTION": "FormFunction",
+    "EXCHANGE_ART": "Exchange Art",
+    "SOLANART": "Solanart",
+    "DIGITAL_EYES": "DigitalEyes",
+    "HYPERSPACE": "Hyperspace",
+    "CORAL_CUBE": "CoralCube",
+    "YAWWW": "Yawww",
+    "SNIPER_MARKET": "Sniper Market",
+    "CARDINAL_RENT": "Cardinal Rent",
+    "CARDINAL_STAKING": "Cardinal Staking",
+    "SQUADS": "Squads",
+    "MEAN_FINANCE": "Mean Protocol",
+    "ZEBEC": "Zebec Protocol",
+    "BONFIDA": "Bonfida",
+    "STAR_ATLAS": "Star Atlas",
+    "AURORY": "Aurory",
+    "CLOCKWORK": "Clockwork",
+    "GENESYSGO": "GenesysGo",
+    "PYTH": "Pyth Oracle",
+    "SWITCHBOARD": "Switchboard",
+    "ALDRIN": "Aldrin",
+    "CREMA": "Crema Finance",
+    "SAROS": "Saros",
+    "CROPPER": "Cropper",
+    "CYKURA": "Cykura",
+    "GOOSEFX": "GooseFX",
+    "MARINADE_FINANCE": "Marinade Finance",
+    "RAYDIUM_V4": "Raydium AMM V4",
+    "RAYDIUM_CLMM": "Raydium CLMM",
+    "RAYDIUM_CPMM": "Raydium CPMM",
+    "W_SOL": "Wrapped SOL",
+    "SYSTEM_PROGRAM": "System Program",
+    "UNKNOWN": "",
+}
