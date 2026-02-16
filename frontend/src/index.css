@@ -360,6 +360,12 @@ body::before{
 /* Hero stats */
 .hero-stats{display:flex;gap:0.75rem;justify-content:center;align-items:center;margin-top:1.5rem;font-size:0.9rem;color:#888}
 .hero-stats strong{color:#ff7832}
+.hero-stats-banner{display:flex;justify-content:center;align-items:center;gap:1.5rem;margin-top:1.5rem;padding:1rem 2rem;background:rgba(255,107,43,0.08);border:1px solid rgba(255,107,43,0.2);border-radius:12px;animation:fadeInUp 0.6s ease}
+.hero-stat-item{display:flex;flex-direction:column;align-items:center;gap:0.2rem}
+.hero-stat-num{font-size:1.5rem;font-weight:800;color:#ff7832;font-variant-numeric:tabular-nums}
+.hero-stat-label{font-size:0.8rem;color:#888;text-transform:uppercase;letter-spacing:0.05em}
+.hero-stat-divider{width:1px;height:2.5rem;background:rgba(255,107,43,0.3)}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
 /* Recent wallet label */
 .recent-wallet{font-family:monospace;font-size:0.7rem;color:#555}

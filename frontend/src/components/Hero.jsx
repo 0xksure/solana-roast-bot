@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import WalletButton from './WalletButton';
 import PersonaSelector from './PersonaSelector';
 
@@ -8,6 +8,24 @@ const EXAMPLES = [
   { name: 'Whale 🐋', addr: '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9' },
 ];
 
+function useCountUp(target, duration = 1500) {
+  const [value, setValue] = useState(0);
+  const started = useRef(false);
+  useEffect(() => {
+    if (!target || started.current) return;
+    started.current = true;
+    const start = performance.now();
+    function tick(now) {
+      const p = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setValue(Math.round(target * eased));
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }, [target, duration]);
+  return value;
+}
+
 export default function Hero({ onRoast, error, battleMode, onToggleBattle, persona, onPersonaChange }) {
   const [input, setInput] = useState('');
   const [stats, setStats] = useState(null);
@@ -15,6 +33,9 @@ export default function Hero({ onRoast, error, battleMode, onToggleBattle, perso
   useEffect(() => {
     fetch('/api/stats').then(r => r.json()).then(setStats).catch(() => {});
   }, []);
+
+  const animatedRoasts = useCountUp(stats?.total_roasts);
+  const animatedScore = useCountUp(stats?.avg_degen_score, 1200);
 
   const handleSubmit = () => {
     if (input.trim()) onRoast(input.trim(), persona);
@@ -68,10 +89,16 @@ export default function Hero({ onRoast, error, battleMode, onToggleBattle, perso
       )}
 
       {stats && stats.total_roasts > 0 && (
-        <div className="hero-stats">
-          <span>🔥 <strong>{stats.total_roasts.toLocaleString()}</strong> wallets roasted</span>
-          <span>·</span>
-          <span>📊 Avg degen score: <strong>{stats.avg_degen_score}</strong>/100</span>
+        <div className="hero-stats-banner">
+          <div className="hero-stat-item">
+            <span className="hero-stat-num">🔥 {animatedRoasts.toLocaleString()}</span>
+            <span className="hero-stat-label">wallets roasted</span>
+          </div>
+          <div className="hero-stat-divider" />
+          <div className="hero-stat-item">
+            <span className="hero-stat-num">📊 {animatedScore}</span>
+            <span className="hero-stat-label">avg degen score</span>
+          </div>
         </div>
       )}
     </div>
